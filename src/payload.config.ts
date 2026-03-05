@@ -10,13 +10,17 @@ import {
   UnorderedListFeature,
   lexicalEditor,
 } from '@payloadcms/richtext-lexical'
+import { en } from '@payloadcms/translations/languages/en'
+import { ru } from '@payloadcms/translations/languages/ru'
 import path from 'path'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 
 import { Categories } from '@/collections/Categories'
+import { ContactMessages } from '@/collections/ContactMessages'
 import { Media } from '@/collections/Media'
 import { Pages } from '@/collections/Pages'
+import { Requests } from '@/collections/Requests'
 import { Users } from '@/collections/Users'
 import { Footer } from '@/globals/Footer'
 import { Header } from '@/globals/Header'
@@ -37,7 +41,11 @@ export default buildConfig({
     },
     user: Users.slug,
   },
-  collections: [Users, Pages, Categories, Media],
+  i18n: {
+    fallbackLanguage: 'ru',
+    supportedLanguages: { ru, en },
+  },
+  collections: [Users, Pages, Categories, Media, Requests, ContactMessages],
   db: sqliteAdapter({
     client: {
       url: process.env.DATABASE_URL || '',

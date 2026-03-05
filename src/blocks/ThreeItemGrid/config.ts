@@ -10,7 +10,7 @@ export const ThreeItemGrid: Block = {
         isSortable: true,
       },
       hasMany: true,
-      label: 'Products to show',
+      label: 'Товары для показа',
       maxRows: 3,
       minRows: 3,
       relationTo: 'products',
@@ -18,7 +18,7 @@ export const ThreeItemGrid: Block = {
   ],
   interfaceName: 'ThreeItemGridBlock',
   labels: {
-    plural: 'Three Item Grids',
-    singular: 'Three Item Grid',
+    plural: 'Сетки из 3 товаров',
+    singular: 'Сетка из 3 товаров',
   },
 }

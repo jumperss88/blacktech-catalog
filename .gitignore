@@ -41,3 +41,7 @@ next-env.d.ts
 
 public/media
 
+# local runtime artifacts
+.next_broken_*/
+blacktech-catalog.db
+test-results/

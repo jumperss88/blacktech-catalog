@@ -1,128 +1,259 @@
 'use client'
 
 import { Media } from '@/components/Media'
-import { Message } from '@/components/Message'
 import { Price } from '@/components/Price'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/providers/Auth'
-import { useTheme } from '@/providers/Theme'
-import { Elements } from '@stripe/react-stripe-js'
-import { loadStripe } from '@stripe/stripe-js'
+import { useCart } from '@payloadcms/plugin-ecommerce/client/react'
+import { MinusIcon, PlusIcon, RotateCcwIcon, XIcon } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import React, { Suspense, useCallback, useEffect, useState } from 'react'
-
-import { cssVariables } from '@/cssVariables'
-import { CheckoutForm } from '@/components/forms/CheckoutForm'
-import { useAddresses, useCart, usePayments } from '@payloadcms/plugin-ecommerce/client/react'
-import { CheckoutAddresses } from '@/components/checkout/CheckoutAddresses'
-import { CreateAddressModal } from '@/components/addresses/CreateAddressModal'
-import { Address } from '@/payload-types'
-import { Checkbox } from '@/components/ui/checkbox'
-import { AddressItem } from '@/components/addresses/AddressItem'
-import { FormItem } from '@/components/forms/FormItem'
 import { toast } from 'sonner'
-import { LoadingSpinner } from '@/components/LoadingSpinner'
+import type { Cart, Variant } from '@/payload-types'
+import { useEffect, useMemo, useState } from 'react'
 
-const apiKey = `${process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}`
-const stripe = loadStripe(apiKey)
+type CartItem = NonNullable<Cart['items']>[number]
+type VariantOptionValue = Variant['options'][number]
+
+type RequestPayload = {
+  contact: {
+    name?: string
+    company?: string
+    phone?: string
+    email?: string
+    comment?: string
+  }
+  items: {
+    productId: number
+    quantity: number
+    title: string
+    variantId?: number
+    variantLabel?: string
+    priceInUSD?: number
+  }[]
+  subtotal?: number
+}
 
 export const CheckoutPage: React.FC = () => {
   const { user } = useAuth()
-  const router = useRouter()
-  const { cart } = useCart()
-  const [error, setError] = useState<null | string>(null)
-  const { theme } = useTheme()
-  /**
-   * State to manage the email input for guest checkout.
-   */
+  const { cart, clearCart, decrementItem, incrementItem, isLoading } = useCart()
+
+  const [name, setName] = useState('')
+  const [company, setCompany] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
-  const [emailEditable, setEmailEditable] = useState(true)
-  const [paymentData, setPaymentData] = useState<null | Record<string, unknown>>(null)
-  const { initiatePayment } = usePayments()
-  const { addresses } = useAddresses()
-  const [shippingAddress, setShippingAddress] = useState<Partial<Address>>()
-  const [billingAddress, setBillingAddress] = useState<Partial<Address>>()
-  const [billingAddressSameAsShipping, setBillingAddressSameAsShipping] = useState(true)
-  const [isProcessingPayment, setProcessingPayment] = useState(false)
+  const [comment, setComment] = useState('')
 
-  const cartIsEmpty = !cart || !cart.items || !cart.items.length
-
-  const canGoToPayment = Boolean(
-    (email || user) && billingAddress && (billingAddressSameAsShipping || shippingAddress),
-  )
-
-  // On initial load wait for addresses to be loaded and check to see if we can prefill a default one
-  useEffect(() => {
-    if (!shippingAddress) {
-      if (addresses && addresses.length > 0) {
-        const defaultAddress = addresses[0]
-        if (defaultAddress) {
-          setBillingAddress(defaultAddress)
-        }
-      }
-    }
-  }, [addresses])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<null | string>(null)
+  const [errorMessage, setErrorMessage] = useState<null | string>(null)
+  const [typedQuantities, setTypedQuantities] = useState<Record<string, string>>({})
+  const [removedItemIDs, setRemovedItemIDs] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    return () => {
-      setShippingAddress(undefined)
-      setBillingAddress(undefined)
-      setBillingAddressSameAsShipping(true)
-      setEmail('')
-      setEmailEditable(true)
+    if (user?.email) {
+      setEmail(user.email)
     }
-  }, [])
 
-  const initiatePaymentIntent = useCallback(
-    async (paymentID: string) => {
-      try {
-        const paymentData = (await initiatePayment(paymentID, {
-          additionalData: {
-            ...(email ? { customerEmail: email } : {}),
-            billingAddress,
-            shippingAddress: billingAddressSameAsShipping ? billingAddress : shippingAddress,
-          },
-        })) as Record<string, unknown>
+    if (user?.name) {
+      setName(user.name)
+    }
+  }, [user?.email, user?.name])
 
-        if (paymentData) {
-          setPaymentData(paymentData)
+  const cartIsEmpty = !cart || !cart.items || cart.items.length === 0
+  const hasContact = Boolean(phone.trim() || email.trim())
+
+  const requestItems = useMemo<RequestPayload['items']>(() => {
+    if (!cart?.items?.length) return []
+
+    return cart.items
+      .map((item) => {
+        const itemID = item.id ? String(item.id) : undefined
+        if (itemID && removedItemIDs[itemID]) return null
+        if (!item || typeof item.product !== 'object') return null
+
+        const product = item.product
+        const quantity = item.quantity || 0
+        const variant = item.variant && typeof item.variant === 'object' ? item.variant : undefined
+
+        const variantLabel = variant?.options
+          ?.map((option: VariantOptionValue) => {
+            if (typeof option === 'object') return option.label
+            return null
+          })
+          .filter(Boolean)
+          .join(', ')
+
+        if (!quantity) return null
+
+        return {
+          productId: product.id,
+          quantity,
+          title: product.title,
+          variantId: variant?.id,
+          variantLabel: variantLabel || undefined,
+          priceInUSD:
+            typeof (variant?.priceInUSD ?? product.priceInUSD) === 'number'
+              ? (variant?.priceInUSD ?? product.priceInUSD)
+              : undefined,
         }
-      } catch (error) {
-        const errorData = error instanceof Error ? JSON.parse(error.message) : {}
-        let errorMessage = 'An error occurred while initiating payment.'
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+  }, [cart?.items, removedItemIDs])
 
-        if (errorData?.cause?.code === 'OutOfStock') {
-          errorMessage = 'One or more items in your cart are out of stock.'
-        }
+  const activeSubtotal = useMemo(() => {
+    if (!cart?.items?.length) return 0
 
-        setError(errorMessage)
-        toast.error(errorMessage)
+    return cart.items.reduce((sum, item) => {
+      const itemID = item.id ? String(item.id) : undefined
+      if (!itemID || removedItemIDs[itemID]) return sum
+      if (!item.quantity || typeof item.product !== 'object') return sum
+
+      const variant = item.variant && typeof item.variant === 'object' ? item.variant : undefined
+      const price = variant?.priceInUSD ?? item.product.priceInUSD
+      if (typeof price !== 'number') return sum
+
+      return sum + price * item.quantity
+    }, 0)
+  }, [cart?.items, removedItemIDs])
+
+  const submitRequest = async () => {
+    if (!hasContact) {
+      const message = 'Укажите телефон или email для связи.'
+      setErrorMessage(message)
+      toast.error(message)
+      return
+    }
+
+    if (!requestItems.length) {
+      const message = 'Ваша заявка пуста.'
+      setErrorMessage(message)
+      toast.error(message)
+      return
+    }
+
+    setIsSubmitting(true)
+    setErrorMessage(null)
+
+    try {
+      const body: RequestPayload = {
+        contact: {
+          ...(name.trim() ? { name: name.trim() } : {}),
+          ...(company.trim() ? { company: company.trim() } : {}),
+          ...(phone.trim() ? { phone: phone.trim() } : {}),
+          ...(email.trim() ? { email: email.trim() } : {}),
+          ...(comment.trim() ? { comment: comment.trim() } : {}),
+        },
+        items: requestItems,
+        subtotal: typeof cart?.subtotal === 'number' ? cart.subtotal : undefined,
       }
-    },
-    [billingAddress, billingAddressSameAsShipping, shippingAddress],
-  )
 
-  if (!stripe) return null
+      const response = await fetch('/api/requests/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
 
-  if (cartIsEmpty && isProcessingPayment) {
+      const result = await response.json()
+
+      if (!response.ok) {
+        const message =
+          typeof result?.error === 'string' ? result.error : 'Не удалось отправить заявку.'
+        throw new Error(message)
+      }
+
+      clearCart()
+
+      setSuccessMessage(
+        'Ваша заявка отправлена. Мы свяжемся с вами в ближайшее время для уточнения деталей, стоимости и сроков поставки.',
+      )
+
+      setComment('')
+      setCompany('')
+      setPhone('')
+      if (!user?.email) {
+        setEmail('')
+      }
+
+      toast.success('Заявка успешно отправлена.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Не удалось отправить заявку.'
+      setErrorMessage(message)
+      toast.error(message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const applyTypedQuantity = async (item: CartItem, maxQuantity?: number) => {
+    if (!item.id || !item.quantity) return
+
+    const itemID = String(item.id)
+    const rawValue = typedQuantities[itemID] ?? String(item.quantity)
+    const parsed = Number.parseInt(rawValue, 10)
+
+    if (Number.isNaN(parsed)) {
+      setTypedQuantities((prev) => ({ ...prev, [itemID]: String(item.quantity) }))
+      return
+    }
+
+    let target = parsed
+    if (target < 1) target = 1
+    if (typeof maxQuantity === 'number') {
+      target = Math.min(target, maxQuantity)
+    }
+
+    if (target === item.quantity) {
+      setTypedQuantities((prev) => ({ ...prev, [itemID]: String(target) }))
+      return
+    }
+
+    const diff = target - item.quantity
+    if (diff > 0) {
+      for (let i = 0; i < diff; i += 1) {
+        await Promise.resolve(incrementItem(itemID))
+      }
+    } else {
+      for (let i = 0; i < Math.abs(diff); i += 1) {
+        await Promise.resolve(decrementItem(itemID))
+      }
+    }
+
+    setTypedQuantities((prev) => ({ ...prev, [itemID]: String(target) }))
+  }
+
+  const markItemAsRemoved = (itemID: string) => {
+    setRemovedItemIDs((prev) => ({ ...prev, [itemID]: true }))
+  }
+
+  const restoreRemovedItem = (itemID: string) => {
+    setRemovedItemIDs((prev) => {
+      const next = { ...prev }
+      delete next[itemID]
+      return next
+    })
+  }
+
+  if (successMessage) {
     return (
-      <div className="py-12 w-full items-center justify-center">
-        <div className="prose dark:prose-invert text-center max-w-none self-center mb-8">
-          <p>Processing your payment...</p>
-        </div>
-        <LoadingSpinner />
+      <div className="py-12 w-full items-center">
+        <h2 className="text-3xl font-medium mb-3">Заявка отправлена</h2>
+        <p className="text-muted-foreground max-w-3xl">{successMessage}</p>
       </div>
     )
   }
 
   if (cartIsEmpty) {
     return (
-      <div className="prose dark:prose-invert py-12 w-full items-center">
-        <p>Your cart is empty.</p>
-        <Link href="/search">Continue shopping?</Link>
+      <div className="py-12 w-full items-center">
+        <h2 className="text-3xl font-medium mb-3">Ваша заявка пуста</h2>
+        <p className="text-muted-foreground max-w-2xl">
+          Добавьте интересующие товары, и мы свяжемся с вами для уточнения деталей.
+        </p>
       </div>
     )
   }
@@ -130,311 +261,264 @@ export const CheckoutPage: React.FC = () => {
   return (
     <div className="flex flex-col items-stretch justify-stretch my-8 md:flex-row grow gap-10 md:gap-6 lg:gap-8">
       <div className="basis-full lg:basis-2/3 flex flex-col gap-8 justify-stretch">
-        <h2 className="font-medium text-3xl">Contact</h2>
-        {!user && (
-          <div className=" bg-accent dark:bg-black rounded-lg p-4 w-full flex items-center">
-            <div className="prose dark:prose-invert">
-              <Button asChild className="no-underline text-inherit" variant="outline">
-                <Link href="/login">Log in</Link>
-              </Button>
-              <p className="mt-0">
-                <span className="mx-2">or</span>
-                <Link href="/create-account">create an account</Link>
-              </p>
-            </div>
-          </div>
-        )}
-        {user ? (
-          <div className="bg-accent dark:bg-card rounded-lg p-4 ">
-            <div>
-              <p>{user.email}</p>{' '}
-              <p>
-                Not you?{' '}
-                <Link className="underline" href="/logout">
-                  Log out
-                </Link>
-              </p>
-            </div>
-          </div>
+        <h2 className="font-medium text-3xl">Контактные данные</h2>
+
+        <p className="text-muted-foreground">
+          Оставьте телефон или email, и менеджер свяжется с вами для уточнения деталей заявки.
+        </p>
+
+        {successMessage ? (
+          <div className="rounded-lg bg-primary/5 p-4 text-base">{successMessage}</div>
         ) : (
-          <div className="bg-accent dark:bg-black rounded-lg p-4 ">
-            <div>
-              <p className="mb-4">Enter your email to checkout as a guest.</p>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="request-name">Имя</Label>
+              <Input
+                id="request-name"
+                name="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ваше имя"
+              />
+            </div>
 
-              <FormItem className="mb-6">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  disabled={!emailEditable}
-                  id="email"
-                  name="email"
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  type="email"
-                />
-              </FormItem>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="request-company">Компания</Label>
+              <Input
+                id="request-company"
+                name="company"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="Название компании"
+              />
+            </div>
 
-              <Button
-                disabled={!email || !emailEditable}
-                onClick={(e) => {
-                  e.preventDefault()
-                  setEmailEditable(false)
-                }}
-                variant="default"
-              >
-                Continue as guest
-              </Button>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="request-phone">Телефон</Label>
+              <Input
+                id="request-phone"
+                name="phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+7 (___) ___-__-__"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="request-email">Email</Label>
+              <Input
+                id="request-email"
+                name="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2 md:col-span-2">
+              <Label htmlFor="request-comment">Комментарий</Label>
+              <Textarea
+                id="request-comment"
+                name="comment"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Укажите важные детали по оборудованию и срокам"
+              />
             </div>
           </div>
         )}
 
-        <h2 className="font-medium text-3xl">Address</h2>
-
-        {billingAddress ? (
-          <div>
-            <AddressItem
-              actions={
-                <Button
-                  variant={'outline'}
-                  disabled={Boolean(paymentData)}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setBillingAddress(undefined)
-                  }}
-                >
-                  Remove
-                </Button>
-              }
-              address={billingAddress}
-            />
-          </div>
-        ) : user ? (
-          <CheckoutAddresses heading="Billing address" setAddress={setBillingAddress} />
-        ) : (
-          <CreateAddressModal
-            disabled={!email || Boolean(emailEditable)}
-            callback={(address) => {
-              setBillingAddress(address)
-            }}
-            skipSubmission={true}
-          />
-        )}
-
-        <div className="flex gap-4 items-center">
-          <Checkbox
-            id="shippingTheSameAsBilling"
-            checked={billingAddressSameAsShipping}
-            disabled={Boolean(paymentData || (!user && (!email || Boolean(emailEditable))))}
-            onCheckedChange={(state) => {
-              setBillingAddressSameAsShipping(state as boolean)
-            }}
-          />
-          <Label htmlFor="shippingTheSameAsBilling">Shipping is the same as billing</Label>
-        </div>
-
-        {!billingAddressSameAsShipping && (
+        {!successMessage && (
           <>
-            {shippingAddress ? (
-              <div>
-                <AddressItem
-                  actions={
-                    <Button
-                      variant={'outline'}
-                      disabled={Boolean(paymentData)}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setShippingAddress(undefined)
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  }
-                  address={shippingAddress}
-                />
-              </div>
-            ) : user ? (
-              <CheckoutAddresses
-                heading="Shipping address"
-                description="Please select a shipping address."
-                setAddress={setShippingAddress}
-              />
-            ) : (
-              <CreateAddressModal
-                callback={(address) => {
-                  setShippingAddress(address)
-                }}
-                disabled={!email || Boolean(emailEditable)}
-                skipSubmission={true}
-              />
-            )}
-          </>
-        )}
+            <p className="text-sm text-muted-foreground">Для отправки заявки укажите телефон или email.</p>
 
-        {!paymentData && (
-          <Button
-            className="self-start"
-            disabled={!canGoToPayment}
-            onClick={(e) => {
-              e.preventDefault()
-              void initiatePaymentIntent('stripe')
-            }}
-          >
-            Go to payment
-          </Button>
-        )}
-
-        {!paymentData?.['clientSecret'] && error && (
-          <div className="my-8">
-            <Message error={error} />
+            {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
 
             <Button
+              className="self-start"
+              disabled={isSubmitting || !hasContact || requestItems.length === 0}
               onClick={(e) => {
                 e.preventDefault()
-                router.refresh()
+                void submitRequest()
               }}
-              variant="default"
             >
-              Try again
+              {isSubmitting ? 'Отправка...' : 'Отправить заявку'}
             </Button>
-          </div>
+          </>
         )}
-
-        <Suspense fallback={<React.Fragment />}>
-          {/* @ts-ignore */}
-          {paymentData && paymentData?.['clientSecret'] && (
-            <div className="pb-16">
-              <h2 className="font-medium text-3xl">Payment</h2>
-              {error && <p>{`Error: ${error}`}</p>}
-              <Elements
-                options={{
-                  appearance: {
-                    theme: 'stripe',
-                    variables: {
-                      borderRadius: '6px',
-                      colorPrimary: '#858585',
-                      gridColumnSpacing: '20px',
-                      gridRowSpacing: '20px',
-                      colorBackground: theme === 'dark' ? '#0a0a0a' : cssVariables.colors.base0,
-                      colorDanger: cssVariables.colors.error500,
-                      colorDangerText: cssVariables.colors.error500,
-                      colorIcon:
-                        theme === 'dark' ? cssVariables.colors.base0 : cssVariables.colors.base1000,
-                      colorText: theme === 'dark' ? '#858585' : cssVariables.colors.base1000,
-                      colorTextPlaceholder: '#858585',
-                      fontFamily: 'Geist, sans-serif',
-                      fontSizeBase: '16px',
-                      fontWeightBold: '600',
-                      fontWeightNormal: '500',
-                      spacingUnit: '4px',
-                    },
-                  },
-                  clientSecret: paymentData['clientSecret'] as string,
-                }}
-                stripe={stripe}
-              >
-                <div className="flex flex-col gap-8">
-                  <CheckoutForm
-                    customerEmail={email}
-                    billingAddress={billingAddress}
-                    setProcessingPayment={setProcessingPayment}
-                  />
-                  <Button
-                    variant="ghost"
-                    className="self-start"
-                    onClick={() => setPaymentData(null)}
-                  >
-                    Cancel payment
-                  </Button>
-                </div>
-              </Elements>
-            </div>
-          )}
-        </Suspense>
       </div>
 
-      {!cartIsEmpty && (
-        <div className="basis-full lg:basis-1/3 lg:pl-8 p-8 border-none bg-primary/5 flex flex-col gap-8 rounded-lg">
-          <h2 className="text-3xl font-medium">Your cart</h2>
-          {cart?.items?.map((item, index) => {
-            if (typeof item.product === 'object' && item.product) {
-              const {
-                product,
-                product: { id, meta, title, gallery },
-                quantity,
-                variant,
-              } = item
+      <div className="basis-full lg:basis-1/3 lg:pl-8 p-8 border-none bg-primary/5 flex flex-col gap-8 rounded-lg">
+        <h2 className="text-3xl font-medium">Ваша заявка</h2>
 
-              if (!quantity) return null
+        {cart?.items?.map((item: CartItem, index) => {
+          if (typeof item.product !== 'object' || !item.product) return null
 
-              let image = gallery?.[0]?.image || meta?.image
-              let price = product?.priceInUSD
+          const {
+            product,
+            product: { meta, title, gallery },
+            quantity,
+            variant,
+          } = item
 
-              const isVariant = Boolean(variant) && typeof variant === 'object'
+          if (!quantity) return null
 
-              if (isVariant) {
-                price = variant?.priceInUSD
+          const image = gallery?.[0] || meta?.image
+          let price = product?.priceInUSD
 
-                const imageVariant = product.gallery?.find((item) => {
-                  if (!item.variantOption) return false
-                  const variantOptionID =
-                    typeof item.variantOption === 'object'
-                      ? item.variantOption.id
-                      : item.variantOption
+          const isVariant = Boolean(variant) && typeof variant === 'object'
+          const variantObject = variant && typeof variant === 'object' ? variant : undefined
+          const maxQuantityRaw = variantObject?.inventory ?? product.inventory
+          const maxQuantity = typeof maxQuantityRaw === 'number' ? maxQuantityRaw : undefined
+          const itemID = item.id ? String(item.id) : undefined
+          const isRemoved = Boolean(itemID && removedItemIDs[itemID])
+          const typedValue =
+            itemID && typedQuantities[itemID] !== undefined
+              ? typedQuantities[itemID]
+              : String(quantity)
 
-                  const hasMatch = variant?.options?.some((option) => {
-                    if (typeof option === 'object') return option.id === variantOptionID
-                    else return option === variantOptionID
-                  })
+          if (isVariant) {
+            price = variant?.priceInUSD
+          }
 
-                  return hasMatch
-                })
-
-                if (imageVariant && typeof imageVariant.image !== 'string') {
-                  image = imageVariant.image
-                }
-              }
-
-              return (
-                <div className="flex items-start gap-4" key={index}>
-                  <div className="flex items-stretch justify-stretch h-20 w-20 p-2 rounded-lg border">
-                    <div className="relative w-full h-full">
-                      {image && typeof image !== 'string' && (
-                        <Media className="" fill imgClassName="rounded-lg" resource={image} />
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex grow justify-between items-center">
-                    <div className="flex flex-col gap-1">
-                      <p className="font-medium text-lg">{title}</p>
-                      {variant && typeof variant === 'object' && (
-                        <p className="text-sm font-mono text-primary/50 tracking-widest">
-                          {variant.options
-                            ?.map((option) => {
-                              if (typeof option === 'object') return option.label
-                              return null
-                            })
-                            .join(', ')}
-                        </p>
-                      )}
-                      <div>
-                        {'x'}
-                        {quantity}
-                      </div>
-                    </div>
-
-                    {typeof price === 'number' && <Price amount={price} />}
-                  </div>
+          return (
+            <div className={`flex items-start gap-4 ${isRemoved ? 'opacity-55' : ''}`} key={index}>
+              <div className="relative flex items-stretch justify-stretch h-20 w-20 p-2 rounded-lg border">
+                <div className="absolute -top-2 -right-2 z-10">
+                  {itemID && !isRemoved ? (
+                    <button
+                      aria-label="Пометить как удалённый"
+                      className="ease hover:cursor-pointer flex h-[17px] w-[17px] items-center justify-center rounded-full bg-neutral-500 transition-all duration-200 hover:opacity-80"
+                      disabled={isLoading}
+                      onClick={() => markItemAsRemoved(itemID)}
+                      type="button"
+                    >
+                      <XIcon className="mx-px h-4 w-4 text-white" />
+                    </button>
+                  ) : null}
                 </div>
-              )
-            }
-            return null
-          })}
-          <hr />
-          <div className="flex justify-between items-center gap-2">
-            <span className="uppercase">Total</span>{' '}
-            <Price className="text-3xl font-medium" amount={cart.subtotal || 0} />
-          </div>
+                <div className="relative w-full h-full">
+                  {image && typeof image !== 'string' && (
+                    <Media className="" fill imgClassName="rounded-lg" resource={image} />
+                  )}
+                </div>
+              </div>
+
+              <div className="flex grow justify-between items-start gap-4">
+                <div className="flex flex-col gap-1">
+                  {product.slug ? (
+                    <Link
+                      className="font-medium text-lg leading-tight hover:underline"
+                      href={`/products/${product.slug}`}
+                    >
+                      {title}
+                    </Link>
+                  ) : (
+                    <p className="font-medium text-lg leading-tight">{title}</p>
+                  )}
+                  {variant && typeof variant === 'object' && (
+                    <p className="text-sm font-mono text-primary/50 tracking-widest">
+                      {variant.options
+                        ?.map((option: VariantOptionValue) => {
+                          if (typeof option === 'object') return option.label
+                          return null
+                        })
+                        .join(', ')}
+                    </p>
+                  )}
+
+                  {isRemoved ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Удалено
+                      </span>
+                      {itemID && (
+                        <button
+                          className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-background"
+                          onClick={() => restoreRemovedItem(itemID)}
+                          type="button"
+                        >
+                          <RotateCcwIcon className="h-3.5 w-3.5" />
+                          Восстановить
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid h-10 w-[144px] grid-cols-[32px_1fr_32px] items-center rounded-lg border px-1">
+                      <button
+                        aria-label="Уменьшить количество"
+                        className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!itemID || isLoading}
+                        onClick={() => {
+                          if (!itemID) return
+                          if (quantity <= 1) {
+                            markItemAsRemoved(itemID)
+                            return
+                          }
+                          void decrementItem(itemID)
+                        }}
+                        type="button"
+                      >
+                        <MinusIcon className="h-4 w-4" />
+                      </button>
+
+                      <input
+                        aria-label="Количество"
+                        className="w-full border-0 bg-transparent p-0 text-center text-lg font-medium leading-none outline-none"
+                        inputMode="numeric"
+                        onBlur={() => void applyTypedQuantity(item, maxQuantity)}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^\d]/g, '')
+                          if (itemID) {
+                            setTypedQuantities((prev) => ({ ...prev, [itemID]: value }))
+                          }
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            void applyTypedQuantity(item, maxQuantity)
+                          }
+                        }}
+                        pattern="[0-9]*"
+                        type="text"
+                        value={typedValue}
+                      />
+
+                      <button
+                        aria-label="Увеличить количество"
+                        className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={
+                          !itemID ||
+                          isLoading ||
+                          (typeof maxQuantity === 'number' ? quantity >= maxQuantity : false)
+                        }
+                        onClick={() => {
+                          if (itemID) void incrementItem(itemID)
+                        }}
+                        type="button"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {typeof price === 'number' && <Price amount={price} />}
+              </div>
+            </div>
+          )
+        })}
+
+        <hr />
+
+        <div className="flex justify-between items-center gap-2">
+          <span className="uppercase">Итого</span>
+          <Price className="text-3xl font-medium" amount={activeSubtotal} />
         </div>
-      )}
+      </div>
     </div>
   )
 }

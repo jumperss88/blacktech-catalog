@@ -5,5 +5,9 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "css.lint.unknownAtRules": "ignore",
+  "css.lint.vendorPrefix": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "scss.lint.vendorPrefix": "ignore"
 }

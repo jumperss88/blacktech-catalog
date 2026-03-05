@@ -22,9 +22,11 @@ export function FilterList({ list, title }: { list: ListItem[]; title?: string }
     <React.Fragment>
       <nav>
         {title ? (
-          <h3 className="text-xs mb-2 text-neutral-500 dark:text-neutral-400">{title}</h3>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            {title}
+          </h3>
         ) : null}
-        <ul className="hidden md:block">
+        <ul className="hidden space-y-1 md:block">
           <Suspense fallback={null}>
             <FilterItemList list={list} />
           </Suspense>

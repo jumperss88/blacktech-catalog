@@ -10,6 +10,10 @@ import { ensureFirstUserIsAdmin } from './hooks/ensureFirstUserIsAdmin'
 
 export const Users: CollectionConfig = {
   slug: 'users',
+  labels: {
+    singular: 'Пользователь',
+    plural: 'Пользователи',
+  },
   access: {
     admin: ({ req: { user } }) => checkRole(['admin'], user),
     create: publicAccess,
@@ -18,7 +22,7 @@ export const Users: CollectionConfig = {
     update: adminOrSelf,
   },
   admin: {
-    group: 'Users',
+    group: 'Пользователи',
     defaultColumns: ['name', 'email', 'roles'],
     useAsTitle: 'name',
   },
@@ -29,10 +33,12 @@ export const Users: CollectionConfig = {
     {
       name: 'name',
       type: 'text',
+      label: 'Имя',
     },
     {
       name: 'roles',
       type: 'select',
+      label: 'Роли',
       access: {
         create: adminOnlyFieldAccess,
         read: adminOnlyFieldAccess,
@@ -45,11 +51,11 @@ export const Users: CollectionConfig = {
       },
       options: [
         {
-          label: 'admin',
+          label: 'Администратор',
           value: 'admin',
         },
         {
-          label: 'customer',
+          label: 'Клиент',
           value: 'customer',
         },
       ],
@@ -57,6 +63,7 @@ export const Users: CollectionConfig = {
     {
       name: 'orders',
       type: 'join',
+      label: 'Заказы',
       collection: 'orders',
       on: 'customer',
       admin: {
@@ -67,6 +74,7 @@ export const Users: CollectionConfig = {
     {
       name: 'cart',
       type: 'join',
+      label: 'Корзины',
       collection: 'carts',
       on: 'customer',
       admin: {
@@ -77,6 +85,7 @@ export const Users: CollectionConfig = {
     {
       name: 'addresses',
       type: 'join',
+      label: 'Адреса',
       collection: 'addresses',
       on: 'customer',
       admin: {

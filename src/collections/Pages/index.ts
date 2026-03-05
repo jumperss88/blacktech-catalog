@@ -1,7 +1,10 @@
 import type { CollectionConfig } from 'payload'
 
+import { AboutCompany } from '@/blocks/AboutCompany/config'
 import { Banner } from '@/blocks/Banner/config'
 import { Carousel } from '@/blocks/Carousel/config'
+import { ContactsHub } from '@/blocks/ContactsHub/config'
+import { ServiceCenter } from '@/blocks/ServiceCenter/config'
 import { ThreeItemGrid } from '@/blocks/ThreeItemGrid/config'
 import { generatePreviewPath } from '@/utilities/generatePreviewPath'
 import { adminOnly } from '@/access/adminOnly'
@@ -13,6 +16,7 @@ import { MediaBlock } from '@/blocks/MediaBlock/config'
 import { hero } from '@/fields/hero'
 import { slugField } from 'payload'
 import { adminOrPublishedStatus } from '@/access/adminOrPublishedStatus'
+import { slugifyRussian } from '@/utilities/slugifyRussian'
 import {
   MetaDescriptionField,
   MetaImageField,
@@ -22,8 +26,15 @@ import {
 } from '@payloadcms/plugin-seo/fields'
 import { revalidatePage, revalidateDelete } from './hooks/revalidatePage'
 
+const isAdminPreviewEnabled =
+  process.env.NODE_ENV !== 'development' || process.env.NEXT_PUBLIC_ENABLE_ADMIN_PREVIEW === 'true'
+
 export const Pages: CollectionConfig = {
   slug: 'pages',
+  labels: {
+    singular: 'Страница',
+    plural: 'Страницы',
+  },
   access: {
     create: adminOnly,
     delete: adminOnly,
@@ -31,33 +42,39 @@ export const Pages: CollectionConfig = {
     update: adminOnly,
   },
   admin: {
-    group: 'Content',
+    group: 'Контент',
     defaultColumns: ['title', 'slug', 'updatedAt'],
-    livePreview: {
-      url: ({ data, req }) =>
-        generatePreviewPath({
-          slug: data?.slug,
-          collection: 'pages',
-          req,
-        }),
-    },
-    preview: (data, { req }) =>
-      generatePreviewPath({
-        slug: data?.slug as string,
-        collection: 'pages',
-        req,
-      }),
+    ...(isAdminPreviewEnabled
+      ? {
+          livePreview: {
+            url: ({ data, req }) =>
+              generatePreviewPath({
+                slug: data?.slug,
+                collection: 'pages',
+                req,
+              }),
+          },
+          preview: (data: { slug?: string }, { req }) =>
+            generatePreviewPath({
+              slug: data?.slug as string,
+              collection: 'pages',
+              req,
+            }),
+        }
+      : {}),
     useAsTitle: 'title',
   },
   fields: [
     {
       name: 'title',
       type: 'text',
+      label: 'Заголовок',
       required: true,
     },
     {
       name: 'publishedOn',
       type: 'date',
+      label: 'Дата публикации',
       admin: {
         date: {
           pickerAppearance: 'dayAndTime',
@@ -80,19 +97,23 @@ export const Pages: CollectionConfig = {
       tabs: [
         {
           fields: [hero],
-          label: 'Hero',
+          label: 'Обложка',
         },
         {
           fields: [
             {
               name: 'layout',
               type: 'blocks',
+              label: 'Макет страницы',
               blocks: [
+                AboutCompany,
                 CallToAction,
                 Content,
+                ContactsHub,
                 MediaBlock,
                 Archive,
                 Carousel,
+                ServiceCenter,
                 ThreeItemGrid,
                 Banner,
                 FormBlock,
@@ -100,7 +121,7 @@ export const Pages: CollectionConfig = {
               required: true,
             },
           ],
-          label: 'Content',
+          label: 'Контент',
         },
         {
           name: 'meta',
@@ -112,7 +133,7 @@ export const Pages: CollectionConfig = {
               imagePath: 'meta.image',
             }),
             MetaTitleField({
-              hasGenerateFn: true,
+              hasGenerateFn: process.env.NODE_ENV !== 'development',
             }),
             MetaImageField({
               relationTo: 'media',
@@ -121,7 +142,7 @@ export const Pages: CollectionConfig = {
             MetaDescriptionField({}),
             PreviewField({
               // if the `generateUrl` function is configured
-              hasGenerateFn: true,
+              hasGenerateFn: process.env.NODE_ENV !== 'development',
 
               // field paths to match the target field for data
               titlePath: 'meta.title',
@@ -131,7 +152,13 @@ export const Pages: CollectionConfig = {
         },
       ],
     },
-    slugField(),
+    slugField({
+      slugify: ({ data, valueToSlugify }) => {
+        const source = valueToSlugify || data?.title
+        if (!source || typeof source !== 'string') return undefined
+        return slugifyRussian(source)
+      },
+    }),
   ],
   hooks: {
     afterChange: [revalidatePage],

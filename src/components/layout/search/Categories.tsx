@@ -2,31 +2,29 @@ import configPromise from '@payload-config'
 import { getPayload } from 'payload'
 import clsx from 'clsx'
 import React, { Suspense } from 'react'
+import type { Category } from '@/payload-types'
 
 import { FilterList } from './filter'
-import { CategoryItem } from './Categories.client'
+import { CategoriesList } from './Categories.client'
+import { buildCatalogCategoryViews } from '@/lib/catalog-categories'
 
 async function CategoryList() {
   const payload = await getPayload({ config: configPromise })
 
   const categories = await payload.find({
     collection: 'categories',
+    overrideAccess: false,
     sort: 'title',
   })
+  const categoriesView = buildCatalogCategoryViews(categories.docs as Category[])
 
   return (
     <div>
-      <h3 className="text-xs mb-2 text-neutral-500 dark:text-neutral-400">Category</h3>
+      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+        Категории
+      </h3>
 
-      <ul>
-        {categories.docs.map((category) => {
-          return (
-            <li key={category.id}>
-              <CategoryItem category={category} />
-            </li>
-          )
-        })}
-      </ul>
+      <CategoriesList categories={categoriesView} />
     </div>
   )
 }

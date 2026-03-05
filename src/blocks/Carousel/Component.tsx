@@ -50,7 +50,7 @@ export const CarouselBlock: React.FC<
   if (!products?.length) return null
 
   return (
-    <div className=" w-full pb-6 pt-1">
+    <div className="container">
       <CarouselClient products={products} />
     </div>
   )

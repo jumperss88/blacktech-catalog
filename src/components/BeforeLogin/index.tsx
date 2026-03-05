@@ -4,10 +4,11 @@ export const BeforeLogin: React.FC = () => {
   return (
     <div>
       <p>
-        <b>Welcome to your dashboard!</b>
-        {' This is where site admins will log in to manage your store. Customers will need to '}
-        <a href={`${process.env.PAYLOAD_PUBLIC_SERVER_URL}/login`}>log in to the site instead</a>
-        {' to access their user account, order history, and more.'}
+        <b>Добро пожаловать в панель управления!</b>
+        {' Здесь администраторы сайта входят в систему для управления контентом и товарами. '}
+        {'Покупателям нужно '}
+        <a href={`${process.env.PAYLOAD_PUBLIC_SERVER_URL}/login`}>входить через страницу сайта</a>
+        {' для доступа к личному кабинету, истории заказов и другим функциям.'}
       </p>
     </div>
   )

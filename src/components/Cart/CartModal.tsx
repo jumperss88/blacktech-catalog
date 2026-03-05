@@ -20,7 +20,10 @@ import { DeleteItemButton } from './DeleteItemButton'
 import { EditItemQuantityButton } from './EditItemQuantityButton'
 import { OpenCartButton } from './OpenCart'
 import { Button } from '@/components/ui/button'
-import { Product } from '@/payload-types'
+import type { Cart, Product, Variant } from '@/payload-types'
+
+type CartItem = NonNullable<Cart['items']>[number]
+type VariantOptionValue = Variant['options'][number]
 
 export function CartModal() {
   const { cart } = useCart()
@@ -46,21 +49,23 @@ export function CartModal() {
 
       <SheetContent className="flex flex-col">
         <SheetHeader>
-          <SheetTitle>My Cart</SheetTitle>
+          <SheetTitle>Ваша заявка</SheetTitle>
 
-          <SheetDescription>Manage your cart here, add items to view the total.</SheetDescription>
+          <SheetDescription>
+            Управляйте заявкой: добавляйте позиции и отправляйте запрос менеджеру.
+          </SheetDescription>
         </SheetHeader>
 
         {!cart || cart?.items?.length === 0 ? (
           <div className="text-center flex flex-col items-center gap-2">
             <ShoppingCart className="h-16" />
-            <p className="text-center text-2xl font-bold">Your cart is empty.</p>
+            <p className="text-center text-2xl font-bold">Ваша заявка пуста.</p>
           </div>
         ) : (
           <div className="grow flex px-4">
             <div className="flex flex-col justify-between w-full">
               <ul className="grow overflow-auto py-4">
-                {cart?.items?.map((item, i) => {
+                {cart?.items?.map((item: CartItem, i) => {
                   const product = item.product
                   const variant = item.variant
 
@@ -73,36 +78,15 @@ export function CartModal() {
                       : undefined
 
                   const firstGalleryImage =
-                    typeof product.gallery?.[0]?.image === 'object'
-                      ? product.gallery?.[0]?.image
-                      : undefined
+                    typeof product.gallery?.[0] === 'object' ? product.gallery?.[0] : undefined
 
-                  let image = firstGalleryImage || metaImage
+                  const image = firstGalleryImage || metaImage
                   let price = product.priceInUSD
 
                   const isVariant = Boolean(variant) && typeof variant === 'object'
 
                   if (isVariant) {
                     price = variant?.priceInUSD
-
-                    const imageVariant = product.gallery?.find((item) => {
-                      if (!item.variantOption) return false
-                      const variantOptionID =
-                        typeof item.variantOption === 'object'
-                          ? item.variantOption.id
-                          : item.variantOption
-
-                      const hasMatch = variant?.options?.some((option) => {
-                        if (typeof option === 'object') return option.id === variantOptionID
-                        else return option === variantOptionID
-                      })
-
-                      return hasMatch
-                    })
-
-                    if (imageVariant && typeof imageVariant.image === 'object') {
-                      image = imageVariant.image
-                    }
                   }
 
                   return (
@@ -132,7 +116,7 @@ export function CartModal() {
                             {isVariant && variant ? (
                               <p className="text-sm text-neutral-500 dark:text-neutral-400 capitalize">
                                 {variant.options
-                                  ?.map((option) => {
+                                  ?.map((option: VariantOptionValue) => {
                                     if (typeof option === 'object') return option.label
                                     return null
                                   })
@@ -166,7 +150,7 @@ export function CartModal() {
                 <div className="py-4 text-sm text-neutral-500 dark:text-neutral-400">
                   {typeof cart?.subtotal === 'number' && (
                     <div className="mb-3 flex items-center justify-between border-b border-neutral-200 pb-1 pt-1 dark:border-neutral-700">
-                      <p>Total</p>
+                      <p>Итого</p>
                       <Price
                         amount={cart?.subtotal}
                         className="text-right text-base text-black dark:text-white"
@@ -176,7 +160,7 @@ export function CartModal() {
 
                   <Button asChild>
                     <Link className="w-full" href="/checkout">
-                      Proceed to Checkout
+                      Перейти к заявке
                     </Link>
                   </Button>
                 </div>

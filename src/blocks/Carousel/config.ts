@@ -7,13 +7,14 @@ export const Carousel: Block = {
       name: 'populateBy',
       type: 'select',
       defaultValue: 'collection',
+      label: 'Режим заполнения',
       options: [
         {
-          label: 'Collection',
+          label: 'По коллекции',
           value: 'collection',
         },
         {
-          label: 'Individual Selection',
+          label: 'Ручной выбор',
           value: 'selection',
         },
       ],
@@ -25,10 +26,10 @@ export const Carousel: Block = {
         condition: (_, siblingData) => siblingData.populateBy === 'collection',
       },
       defaultValue: 'products',
-      label: 'Collections To Show',
+      label: 'Коллекция для вывода',
       options: [
         {
-          label: 'Products',
+          label: 'Товары',
           value: 'products',
         },
       ],
@@ -40,7 +41,7 @@ export const Carousel: Block = {
         condition: (_, siblingData) => siblingData.populateBy === 'collection',
       },
       hasMany: true,
-      label: 'Categories To Show',
+      label: 'Категории для вывода',
       relationTo: 'categories',
     },
     {
@@ -51,7 +52,7 @@ export const Carousel: Block = {
         step: 1,
       },
       defaultValue: 10,
-      label: 'Limit',
+      label: 'Лимит',
     },
     {
       name: 'selectedDocs',
@@ -60,7 +61,7 @@ export const Carousel: Block = {
         condition: (_, siblingData) => siblingData.populateBy === 'selection',
       },
       hasMany: true,
-      label: 'Selection',
+      label: 'Выбранные документы',
       relationTo: ['products'],
     },
     {
@@ -68,11 +69,11 @@ export const Carousel: Block = {
       type: 'relationship',
       admin: {
         condition: (_, siblingData) => siblingData.populateBy === 'collection',
-        description: 'This field is auto-populated after-read',
+        description: 'Поле автоматически заполняется после чтения',
         disabled: true,
       },
       hasMany: true,
-      label: 'Populated Docs',
+      label: 'Автозаполненные документы',
       relationTo: ['products'],
     },
     {
@@ -80,16 +81,16 @@ export const Carousel: Block = {
       type: 'number',
       admin: {
         condition: (_, siblingData) => siblingData.populateBy === 'collection',
-        description: 'This field is auto-populated after-read',
+        description: 'Поле автоматически заполняется после чтения',
         disabled: true,
         step: 1,
       },
-      label: 'Populated Docs Total',
+      label: 'Количество автозаполненных документов',
     },
   ],
   interfaceName: 'CarouselBlock',
   labels: {
-    plural: 'Carousels',
-    singular: 'Carousel',
+    plural: 'Карусели',
+    singular: 'Карусель',
   },
 }

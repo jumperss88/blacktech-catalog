@@ -37,12 +37,12 @@ export const plugins: Plugin[] = [
     },
     formSubmissionOverrides: {
       admin: {
-        group: 'Content',
+        group: 'Контент',
       },
     },
     formOverrides: {
       admin: {
-        group: 'Content',
+        group: 'Контент',
       },
       fields: ({ defaultFields }) => {
         return defaultFields.map((field) => {

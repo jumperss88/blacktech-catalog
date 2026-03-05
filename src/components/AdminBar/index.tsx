@@ -10,20 +10,20 @@ import { User } from '@/payload-types'
 
 const collectionLabels = {
   pages: {
-    plural: 'Pages',
-    singular: 'Page',
+    plural: 'Страницы',
+    singular: 'Страница',
   },
   posts: {
-    plural: 'Posts',
-    singular: 'Post',
+    plural: 'Посты',
+    singular: 'Пост',
   },
   projects: {
-    plural: 'Projects',
-    singular: 'Project',
+    plural: 'Проекты',
+    singular: 'Проект',
   },
 }
 
-const Title: React.FC = () => <span>Dashboard</span>
+const Title: React.FC = () => <span>Панель</span>
 
 export const AdminBar: React.FC<{
   adminBarProps?: PayloadAdminBarProps
@@ -61,10 +61,10 @@ export const AdminBar: React.FC<{
           collectionLabels={{
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore - todo fix, not sure why this is erroring
-            plural: collectionLabels[collection]?.plural || 'Pages',
+            plural: collectionLabels[collection]?.plural || 'Страницы',
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore - todo fix, not sure why this is erroring
-            singular: collectionLabels[collection]?.singular || 'Page',
+            singular: collectionLabels[collection]?.singular || 'Страница',
           }}
           logo={<Title />}
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment

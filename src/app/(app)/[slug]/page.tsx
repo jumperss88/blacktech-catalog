@@ -10,7 +10,7 @@ import { homeStaticData } from '@/endpoints/seed/home-static'
 import React from 'react'
 
 import type { Page } from '@/payload-types'
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 
 export async function generateStaticParams() {
   const payload = await getPayload({ config: configPromise })
@@ -44,7 +44,14 @@ type Args = {
 
 export default async function Page({ params }: Args) {
   const { slug = 'home' } = await params
-  const url = '/' + slug
+
+  if (slug === '-') {
+    permanentRedirect('/o-nas')
+  }
+
+  if (isAssetLikeSlug(slug)) {
+    return notFound()
+  }
 
   let page = await queryPageBySlug({
     slug,
@@ -62,9 +69,9 @@ export default async function Page({ params }: Args) {
   const { hero, layout } = page
 
   return (
-    <article className="pt-16 pb-24">
-      <RenderHero {...hero} />
-      <RenderBlocks blocks={layout} />
+    <article className="pt-8 pb-16">
+      {slug === 'o-nas' || slug === 'servisnii-tsentr' || slug === 'kontakty' ? null : <RenderHero {...hero} />}
+      <RenderBlocks blocks={layout} showHomeB2BSection={slug === 'home'} />
     </article>
   )
 }
@@ -72,12 +79,18 @@ export default async function Page({ params }: Args) {
 export async function generateMetadata({ params }: Args): Promise<Metadata> {
   const { slug = 'home' } = await params
 
+  if (isAssetLikeSlug(slug)) {
+    return {}
+  }
+
   const page = await queryPageBySlug({
     slug,
   })
 
   return generateMeta({ doc: page })
 }
+
+const isAssetLikeSlug = (slug: string) => slug.includes('.')
 
 const queryPageBySlug = async ({ slug }: { slug: string }) => {
   const { isEnabled: draft } = await draftMode()

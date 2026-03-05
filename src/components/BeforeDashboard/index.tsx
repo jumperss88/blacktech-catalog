@@ -10,29 +10,27 @@ export const BeforeDashboard: React.FC = () => {
   return (
     <div className={baseClass}>
       <Banner className={`${baseClass}__banner`} type="success">
-        <h4>Welcome to your dashboard!</h4>
+        <h4>Добро пожаловать в панель управления!</h4>
       </Banner>
-      Here&apos;s what to do next:
+      Что можно сделать дальше:
       <ul className={`${baseClass}__instructions`}>
         <li>
           <SeedButton />
-          {' with a few products and pages to jump-start your new project, then '}
+          {' с несколькими товарами и страницами, чтобы быстро запустить проект, затем '}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a href="/">visit your website</a>
-          {' to see the results.'}
+          <a href="/">откройте сайт</a>
+          {' и посмотрите результат.'}
         </li>
         <li>
-          {'Head over to '}
+          {'Перейдите в '}
           <a
             href="https://dashboard.stripe.com/test/apikeys"
             rel="noopener noreferrer"
             target="_blank"
           >
-            Stripe to obtain your API Keys
+            Stripe за API-ключами
           </a>
-          {
-            '. Create a new account if needed, then copy them into your environment variables and restart your server. See the '
-          }
+          {' . Если нужно, создайте аккаунт, затем добавьте ключи в переменные окружения и перезапустите сервер. Подробнее в '}
           <a
             href="https://github.com/payloadcms/payload/blob/main/templates/ecommerce/README.md#stripe"
             rel="noopener noreferrer"
@@ -40,45 +38,45 @@ export const BeforeDashboard: React.FC = () => {
           >
             README
           </a>
-          {' for more details.'}
+          {'.'}
         </li>
         <li>
-          {'Modify your '}
+          {'Настройте '}
           <a
             href="https://payloadcms.com/docs/configuration/collections"
             rel="noopener noreferrer"
             target="_blank"
           >
-            collections
+            коллекции
           </a>
-          {' and add more '}
+          {' и добавьте нужные '}
           <a
             href="https://payloadcms.com/docs/fields/overview"
             rel="noopener noreferrer"
             target="_blank"
           >
-            fields
+            поля
           </a>
-          {' as needed. If you are new to Payload, we also recommend you check out the '}
+          {'. Если вы только начинаете работать с Payload, рекомендуем посмотреть '}
           <a
             href="https://payloadcms.com/docs/getting-started/what-is-payload"
             rel="noopener noreferrer"
             target="_blank"
           >
-            Getting Started
+            руководство по старту
           </a>
-          {' docs.'}
+          {'.'}
         </li>
       </ul>
-      {'Pro Tip: This block is a '}
+      {'Подсказка: этот блок — '}
       <a
         href="https://payloadcms.com/docs/admin/components#base-component-overrides"
         rel="noopener noreferrer"
         target="_blank"
       >
-        custom component
+        кастомный компонент
       </a>
-      , you can remove it at any time by updating your <strong>payload.config</strong>.
+      , его можно убрать в любой момент, изменив <strong>payload.config</strong>.
     </div>
   )
 }

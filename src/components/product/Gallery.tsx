@@ -4,71 +4,133 @@ import type { Media as MediaType, Product } from '@/payload-types'
 
 import { Media } from '@/components/Media'
 import { GridTileImage } from '@/components/Grid/tile'
-import { useSearchParams } from 'next/navigation'
-import React, { useEffect } from 'react'
+import React from 'react'
 
-import { Carousel, CarouselApi, CarouselContent, CarouselItem } from '@/components/ui/carousel'
-import { DefaultDocumentIDType } from 'payload'
+import {
+  Carousel,
+  CarouselApi,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from '@/components/ui/carousel'
 
 type Props = {
   gallery: NonNullable<Product['gallery']>
 }
 
 export const Gallery: React.FC<Props> = ({ gallery }) => {
-  const searchParams = useSearchParams()
   const [current, setCurrent] = React.useState(0)
   const [api, setApi] = React.useState<CarouselApi>()
 
-  useEffect(() => {
-    if (!api) {
-      return
-    }
-  }, [api])
+  const galleryMedia = gallery.filter(
+    (item): item is MediaType => typeof item === 'object' && item !== null,
+  )
+  const showThumbArrows = galleryMedia.length >= 6
 
-  useEffect(() => {
-    const values = Array.from(searchParams.values())
+  React.useEffect(() => {
+    if (!api) return
+    if (current < 0 || current >= galleryMedia.length) return
 
-    if (values && api) {
-      const index = gallery.findIndex((item) => {
-        if (!item.variantOption) return false
+    api.scrollTo(current)
+  }, [api, current, galleryMedia.length])
 
-        let variantID: DefaultDocumentIDType
+  React.useEffect(() => {
+    if (current < galleryMedia.length) return
+    setCurrent(0)
+  }, [current, galleryMedia.length])
 
-        if (typeof item.variantOption === 'object') {
-          variantID = item.variantOption.id
-        } else variantID = item.variantOption
+  const handleThumbsWheel = React.useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (!api) return
 
-        return Boolean(values.find((value) => value === String(variantID)))
-      })
-      if (index !== -1) {
-        setCurrent(index)
-        api.scrollTo(index, true)
+      const absX = Math.abs(event.deltaX)
+      const absY = Math.abs(event.deltaY)
+      const dominantDelta = absX > absY ? event.deltaX : event.deltaY
+
+      if (Math.abs(dominantDelta) < 8) return
+
+      if (dominantDelta > 0) {
+        if (api.canScrollNext()) {
+          event.preventDefault()
+          api.scrollNext()
+        }
+        return
       }
-    }
-  }, [searchParams, api, gallery])
+
+      if (api.canScrollPrev()) {
+        event.preventDefault()
+        api.scrollPrev()
+      }
+    },
+    [api],
+  )
+
+  const goToPrevImage = React.useCallback(() => {
+    if (!galleryMedia.length) return
+    setCurrent((prev) => Math.max(0, prev - 1))
+  }, [galleryMedia.length])
+
+  const goToNextImage = React.useCallback(() => {
+    if (!galleryMedia.length) return
+    setCurrent((prev) => Math.min(galleryMedia.length - 1, prev + 1))
+  }, [galleryMedia.length])
+
+  const handleGalleryKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        goToPrevImage()
+        return
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        goToNextImage()
+      }
+    },
+    [goToNextImage, goToPrevImage],
+  )
 
   return (
-    <div>
-      <div className="relative w-full overflow-hidden mb-8">
+    <div
+      onKeyDown={handleGalleryKeyDown}
+      tabIndex={0}
+      className="outline-none focus:outline-none focus-visible:outline-none"
+    >
+      <div className="relative mb-8 w-full overflow-hidden">
         <Media
-          resource={gallery[current].image}
-          className="w-full"
+          resource={galleryMedia[current]}
+          className="mx-auto w-full max-w-[82%]"
           imgClassName="w-full rounded-lg"
         />
       </div>
 
-      <Carousel setApi={setApi} className="w-full" opts={{ align: 'start', loop: false }}>
+      <Carousel
+        setApi={setApi}
+        className={`w-full ${showThumbArrows ? 'px-10' : 'px-0'}`}
+        opts={{ align: 'start', dragFree: true, loop: false }}
+        onWheel={handleThumbsWheel}
+      >
+        {showThumbArrows ? (
+          <CarouselPrevious className="left-0 top-1/2 h-8 w-8 -translate-y-1/2 border-neutral-300 bg-white" />
+        ) : null}
+        {showThumbArrows ? (
+          <CarouselNext className="right-0 top-1/2 h-8 w-8 -translate-y-1/2 border-neutral-300 bg-white" />
+        ) : null}
         <CarouselContent>
-          {gallery.map((item, i) => {
-            if (typeof item.image !== 'object') return null
+          {galleryMedia.map((item, i) => {
+            if (!item) return null
 
             return (
               <CarouselItem
-                className="basis-1/5"
-                key={`${item.image.id}-${i}`}
-                onClick={() => setCurrent(i)}
+                className="basis-1/3 sm:basis-1/4 lg:basis-1/5"
+                key={`${item.id}-${i}`}
+                onClick={() => {
+                  setCurrent(i)
+                }}
               >
-                <GridTileImage active={i === current} media={item.image} />
+                <GridTileImage active={i === current} media={item} />
               </CarouselItem>
             )
           })}

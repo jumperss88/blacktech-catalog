@@ -15,16 +15,14 @@ export function OpenCartButton({
     <Button
       variant="nav"
       size="clear"
-      className="navLink relative items-end hover:cursor-pointer"
+      className={clsx('headerCartButton relative hover:cursor-pointer', className)}
       {...rest}
     >
-      <span>Cart</span>
+      <ShoppingCart className="h-5 w-5" />
+      <span className="sr-only">Заявка</span>
 
       {quantity ? (
-        <>
-          <span>•</span>
-          <span>{quantity}</span>
-        </>
+        <span className="headerCartBadge">{quantity}</span>
       ) : null}
     </Button>
   )

@@ -26,8 +26,8 @@ type Props = {
 export const CreateAddressModal: React.FC<Props> = ({
   addressID,
   initialData,
-  buttonText = 'Add a new address',
-  modalTitle = 'Add a new address',
+  buttonText = 'Добавить новый адрес',
+  modalTitle = 'Добавить новый адрес',
   callback,
   skipSubmission,
   disabled,
@@ -57,7 +57,7 @@ export const CreateAddressModal: React.FC<Props> = ({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{modalTitle}</DialogTitle>
-          <DialogDescription>This address will be connected to your account.</DialogDescription>
+          <DialogDescription>Этот адрес будет привязан к вашему аккаунту.</DialogDescription>
         </DialogHeader>
 
         <AddressForm

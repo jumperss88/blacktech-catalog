@@ -254,8 +254,8 @@ export const seed = async ({
     depth: 0,
     data: productTshirtData({
       galleryImages: [
-        { image: imageTshirtBlack, variantOption: black },
-        { image: imageTshirtWhite, variantOption: white },
+        imageTshirtBlack,
+        imageTshirtWhite,
       ],
       metaImage: imageTshirtBlack,
       contentImage: imageHero,
@@ -537,38 +537,48 @@ export const seed = async ({
     payload.updateGlobal({
       slug: 'footer',
       data: {
+        aboutDescription:
+          'Профессиональное сценическое световое оборудование, поставки под проекты, закупки, дилерское сотрудничество и сервисная поддержка.',
+        primaryCTA: {
+          label: 'Каталог',
+          url: '/catalog',
+        },
+        secondaryCTA: {
+          label: 'Оставить заявку',
+          url: '/checkout',
+        },
         navItems: [
           {
             link: {
               type: 'custom',
-              label: 'Admin',
-              url: '/admin',
+              label: 'Каталог',
+              url: '/catalog',
             },
           },
           {
             link: {
               type: 'custom',
-              label: 'Find my order',
-              url: '/find-order',
+              label: 'О нас',
+              url: '/o-nas',
             },
           },
           {
             link: {
               type: 'custom',
-              label: 'Source Code',
-              newTab: true,
-              url: 'https://github.com/payloadcms/payload/tree/main/templates/website',
+              label: 'Сервисный центр',
+              url: '/servisnyy-centr',
             },
           },
           {
             link: {
               type: 'custom',
-              label: 'Payload',
-              newTab: true,
-              url: 'https://payloadcms.com/',
+              label: 'Контакты',
+              url: '/goszakupki-44-fz-223-fz',
             },
           },
         ],
+        contactPhone: '+7 (495) 000-00-00',
+        contactEmail: 'info@blacktech.ru',
       },
     }),
   ])

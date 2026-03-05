@@ -76,6 +76,8 @@ export interface Config {
     pages: Page;
     categories: Category;
     media: Media;
+    requests: Request;
+    'contact-messages': ContactMessage;
     forms: Form;
     'form-submissions': FormSubmission;
     addresses: Address;
@@ -109,6 +111,8 @@ export interface Config {
     pages: PagesSelect<false> | PagesSelect<true>;
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    requests: RequestsSelect<false> | RequestsSelect<true>;
+    'contact-messages': ContactMessagesSelect<false> | ContactMessagesSelect<true>;
     forms: FormsSelect<false> | FormsSelect<true>;
     'form-submissions': FormSubmissionsSelect<false> | FormSubmissionsSelect<true>;
     addresses: AddressesSelect<false> | AddressesSelect<true>;
@@ -125,7 +129,7 @@ export interface Config {
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
   };
   db: {
-    defaultIDType: string;
+    defaultIDType: number;
   };
   fallbackLocale: null;
   globals: {
@@ -182,21 +186,21 @@ export interface UserAuthOperations {
  * via the `definition` "users".
  */
 export interface User {
-  id: string;
+  id: number;
   name?: string | null;
   roles?: ('admin' | 'customer')[] | null;
   orders?: {
-    docs?: (string | Order)[];
+    docs?: (number | Order)[];
     hasNextPage?: boolean;
     totalDocs?: number;
   };
   cart?: {
-    docs?: (string | Cart)[];
+    docs?: (number | Cart)[];
     hasNextPage?: boolean;
     totalDocs?: number;
   };
   addresses?: {
-    docs?: (string | Address)[];
+    docs?: (number | Address)[];
     hasNextPage?: boolean;
     totalDocs?: number;
   };
@@ -224,11 +228,11 @@ export interface User {
  * via the `definition` "orders".
  */
 export interface Order {
-  id: string;
+  id: number;
   items?:
     | {
-        product?: (string | null) | Product;
-        variant?: (string | null) | Variant;
+        product?: (number | null) | Product;
+        variant?: (number | null) | Variant;
         quantity: number;
         id?: string | null;
       }[]
@@ -246,9 +250,9 @@ export interface Order {
     country?: string | null;
     phone?: string | null;
   };
-  customer?: (string | null) | User;
+  customer?: (number | null) | User;
   customerEmail?: string | null;
-  transactions?: (string | Transaction)[] | null;
+  transactions?: (number | Transaction)[] | null;
   status?: OrderStatus;
   amount?: number | null;
   currency?: 'USD' | null;
@@ -260,8 +264,11 @@ export interface Order {
  * via the `definition` "products".
  */
 export interface Product {
-  id: string;
+  id: number;
+  brand?: string | null;
+  model?: string | null;
   title: string;
+  descriptionMode?: ('visual' | 'html') | null;
   description?: {
     root: {
       type: string;
@@ -277,34 +284,87 @@ export interface Product {
     };
     [k: string]: unknown;
   } | null;
-  gallery?:
-    | {
-        image: string | Media;
-        variantOption?: (string | null) | VariantOption;
-        id?: string | null;
-      }[]
-    | null;
+  extraDescription?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Можно вставлять HTML-код напрямую для отдельного дополнительного блока на странице товара. Поле не скрывается при смене режима, чтобы контент не терялся визуально.
+   */
+  descriptionHTML?: string | null;
+  /**
+   * Перетаскивайте сразу несколько фото в это поле. Порядок можно менять drag-and-drop прямо в списке.
+   */
+  gallery?: (number | Media)[] | null;
   layout?: (CallToActionBlock | ContentBlock | MediaBlock)[] | null;
   inventory?: number | null;
   enableVariants?: boolean | null;
-  variantTypes?: (string | VariantType)[] | null;
+  variantTypes?: (number | VariantType)[] | null;
   variants?: {
-    docs?: (string | Variant)[];
+    docs?: (number | Variant)[];
     hasNextPage?: boolean;
     totalDocs?: number;
   };
   priceInUSDEnabled?: boolean | null;
   priceInUSD?: number | null;
-  relatedProducts?: (string | Product)[] | null;
+  relatedProducts?: (number | Product)[] | null;
+  specificationsTitle?: string | null;
+  specificationsView?: ('grouped' | 'table') | null;
+  /**
+   * Вставьте таблицу из 2 столбцов (например, из Excel/сайта). После сохранения строки автоматически разложатся в таблицу ниже.
+   */
+  specificationsBulkPaste?: string | null;
+  specifications?:
+    | {
+        name?: string | null;
+        value?: string | null;
+        /**
+         * Можно оставить пустым: при сохранении группа подставится автоматически.
+         */
+        group?:
+          | (
+              | 'deviceType'
+              | 'lightSource'
+              | 'opticsPhotometry'
+              | 'colorMixing'
+              | 'goboFraming'
+              | 'effects'
+              | 'movement'
+              | 'controlConnections'
+              | 'softwareInterface'
+              | 'electricalPower'
+              | 'thermalNoiseEnvironment'
+              | 'safety'
+              | 'compliance'
+              | 'housingMountingWorkingPosition'
+              | 'dimensionsWeight'
+              | 'packagingAccessories'
+              | 'misc'
+            )
+          | null;
+        id?: string | null;
+      }[]
+    | null;
   meta?: {
     title?: string | null;
     /**
      * Maximum upload file size: 12MB. Recommended file size for images is <500KB.
      */
-    image?: (string | null) | Media;
+    image?: (number | null) | Media;
     description?: string | null;
   };
-  categories?: (string | Category)[] | null;
+  categories?: (number | Category)[] | null;
   /**
    * When enabled, the slug will auto-generate from the title field on save and autosave.
    */
@@ -320,8 +380,8 @@ export interface Product {
  * via the `definition` "media".
  */
 export interface Media {
-  id: string;
-  alt: string;
+  id: number;
+  alt?: string | null;
   caption?: {
     root: {
       type: string;
@@ -351,40 +411,6 @@ export interface Media {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "variantOptions".
- */
-export interface VariantOption {
-  id: string;
-  _variantOptions_options_order?: string | null;
-  variantType: string | VariantType;
-  label: string;
-  /**
-   * should be defaulted or dynamic based on label
-   */
-  value: string;
-  updatedAt: string;
-  createdAt: string;
-  deletedAt?: string | null;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "variantTypes".
- */
-export interface VariantType {
-  id: string;
-  label: string;
-  name: string;
-  options?: {
-    docs?: (string | VariantOption)[];
-    hasNextPage?: boolean;
-    totalDocs?: number;
-  };
-  updatedAt: string;
-  createdAt: string;
-  deletedAt?: string | null;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "CallToActionBlock".
  */
 export interface CallToActionBlock {
@@ -410,12 +436,12 @@ export interface CallToActionBlock {
           newTab?: boolean | null;
           reference?: {
             relationTo: 'pages';
-            value: string | Page;
+            value: number | Page;
           } | null;
           url?: string | null;
           label: string;
           /**
-           * Choose how the link should be rendered.
+           * Выберите, как ссылка будет отображаться.
            */
           appearance?: ('default' | 'outline') | null;
         };
@@ -431,7 +457,7 @@ export interface CallToActionBlock {
  * via the `definition` "pages".
  */
 export interface Page {
-  id: string;
+  id: number;
   title: string;
   publishedOn?: string | null;
   hero: {
@@ -458,26 +484,29 @@ export interface Page {
             newTab?: boolean | null;
             reference?: {
               relationTo: 'pages';
-              value: string | Page;
+              value: number | Page;
             } | null;
             url?: string | null;
             label: string;
             /**
-             * Choose how the link should be rendered.
+             * Выберите, как ссылка будет отображаться.
              */
             appearance?: ('default' | 'outline') | null;
           };
           id?: string | null;
         }[]
       | null;
-    media?: (string | null) | Media;
+    media?: (number | null) | Media;
   };
   layout: (
+    | AboutCompanyBlock
     | CallToActionBlock
     | ContentBlock
+    | ContactsHubBlock
     | MediaBlock
     | ArchiveBlock
     | CarouselBlock
+    | ServiceCenterBlock
     | ThreeItemGridBlock
     | BannerBlock
     | FormBlock
@@ -487,7 +516,7 @@ export interface Page {
     /**
      * Maximum upload file size: 12MB. Recommended file size for images is <500KB.
      */
-    image?: (string | null) | Media;
+    image?: (number | null) | Media;
     description?: string | null;
   };
   /**
@@ -498,6 +527,84 @@ export interface Page {
   updatedAt: string;
   createdAt: string;
   _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "AboutCompanyBlock".
+ */
+export interface AboutCompanyBlock {
+  hero: {
+    eyebrow: string;
+    title: string;
+    paragraphs?:
+      | {
+          text: string;
+          id?: string | null;
+        }[]
+      | null;
+    primaryButtonLabel: string;
+    primaryButtonUrl: string;
+    secondaryButtonLabel: string;
+    secondaryButtonUrl: string;
+    heroImage?: (number | null) | Media;
+    visualTags?:
+      | {
+          label: string;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  facts?:
+    | {
+        title: string;
+        description: string;
+        id?: string | null;
+      }[]
+    | null;
+  sections?:
+    | {
+        heading: string;
+        surfaceStyle?: boolean | null;
+        paragraphs?:
+          | {
+              text: string;
+              id?: string | null;
+            }[]
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  partners: {
+    heading: string;
+    paragraphs?:
+      | {
+          text: string;
+          id?: string | null;
+        }[]
+      | null;
+    points?:
+      | {
+          label: string;
+          id?: string | null;
+        }[]
+      | null;
+    buttonLabel: string;
+    buttonUrl: string;
+  };
+  final: {
+    heading: string;
+    paragraphs?:
+      | {
+          text: string;
+          id?: string | null;
+        }[]
+      | null;
+    buttonLabel: string;
+    buttonUrl: string;
+  };
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'aboutCompany';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -528,12 +635,12 @@ export interface ContentBlock {
           newTab?: boolean | null;
           reference?: {
             relationTo: 'pages';
-            value: string | Page;
+            value: number | Page;
           } | null;
           url?: string | null;
           label: string;
           /**
-           * Choose how the link should be rendered.
+           * Выберите, как ссылка будет отображаться.
            */
           appearance?: ('default' | 'outline') | null;
         };
@@ -546,10 +653,71 @@ export interface ContentBlock {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ContactsHubBlock".
+ */
+export interface ContactsHubBlock {
+  hero: {
+    eyebrow: string;
+    title: string;
+    description: string;
+    buttonLabel: string;
+    buttonUrl: string;
+  };
+  heroContacts: {
+    phoneLabel: string;
+    phone: string;
+    emailLabel: string;
+    email: string;
+  };
+  directions?:
+    | {
+        title: string;
+        description: string;
+        id?: string | null;
+      }[]
+    | null;
+  mainContacts: {
+    heading: string;
+    description: string;
+    phoneLabel: string;
+    phone: string;
+    emailLabel: string;
+    email: string;
+  };
+  requisites: {
+    heading: string;
+    nameLabel: string;
+    name: string;
+    innLabel: string;
+    inn: string;
+    ogrnLabel: string;
+    ogrn: string;
+    emailLabel: string;
+    email: string;
+    phoneLabel: string;
+    phone: string;
+  };
+  form: {
+    heading: string;
+    description: string;
+    buttonLabel: string;
+  };
+  final: {
+    heading: string;
+    description: string;
+    buttonLabel: string;
+    buttonUrl: string;
+  };
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'contactsHub';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "MediaBlock".
  */
 export interface MediaBlock {
-  media: string | Media;
+  media: number | Media;
   id?: string | null;
   blockName?: string | null;
   blockType: 'mediaBlock';
@@ -576,12 +744,12 @@ export interface ArchiveBlock {
   } | null;
   populateBy?: ('collection' | 'selection') | null;
   relationTo?: 'products' | null;
-  categories?: (string | Category)[] | null;
+  categories?: (number | Category)[] | null;
   limit?: number | null;
   selectedDocs?:
     | {
         relationTo: 'products';
-        value: string | Product;
+        value: number | Product;
       }[]
     | null;
   id?: string | null;
@@ -593,8 +761,20 @@ export interface ArchiveBlock {
  * via the `definition` "categories".
  */
 export interface Category {
-  id: string;
+  id: number;
   title: string;
+  /**
+   * Выберите категорию-родителя. Если поле пустое — это категория верхнего уровня.
+   */
+  parentCategory?: (number | null) | Category;
+  /**
+   * Небольшая иконка/превью для выпадающего списка "Каталог" в хедере.
+   */
+  dropdownImage?: (number | null) | Media;
+  /**
+   * Главное изображение карточки категории на странице /catalog.
+   */
+  catalogImage?: (number | null) | Media;
   /**
    * When enabled, the slug will auto-generate from the title field on save and autosave.
    */
@@ -610,25 +790,25 @@ export interface Category {
 export interface CarouselBlock {
   populateBy?: ('collection' | 'selection') | null;
   relationTo?: 'products' | null;
-  categories?: (string | Category)[] | null;
+  categories?: (number | Category)[] | null;
   limit?: number | null;
   selectedDocs?:
     | {
         relationTo: 'products';
-        value: string | Product;
+        value: number | Product;
       }[]
     | null;
   /**
-   * This field is auto-populated after-read
+   * Поле автоматически заполняется после чтения
    */
   populatedDocs?:
     | {
         relationTo: 'products';
-        value: string | Product;
+        value: number | Product;
       }[]
     | null;
   /**
-   * This field is auto-populated after-read
+   * Поле автоматически заполняется после чтения
    */
   populatedDocsTotal?: number | null;
   id?: string | null;
@@ -637,10 +817,73 @@ export interface CarouselBlock {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ServiceCenterBlock".
+ */
+export interface ServiceCenterBlock {
+  hero: {
+    eyebrow: string;
+    title: string;
+    paragraphs?:
+      | {
+          text: string;
+          id?: string | null;
+        }[]
+      | null;
+    buttonLabel: string;
+    buttonUrl: string;
+    heroImage?: (number | null) | Media;
+    visualTags?:
+      | {
+          label: string;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  cards?:
+    | {
+        title: string;
+        description: string;
+        id?: string | null;
+      }[]
+    | null;
+  sections?:
+    | {
+        heading: string;
+        paragraphs?:
+          | {
+              text: string;
+              id?: string | null;
+            }[]
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  serviceRequest: {
+    heading: string;
+    description: string;
+    steps?:
+      | {
+          label: string;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  final: {
+    heading: string;
+    description: string;
+    buttonLabel: string;
+    buttonUrl: string;
+  };
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'serviceCenter';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "ThreeItemGridBlock".
  */
 export interface ThreeItemGridBlock {
-  products?: (string | Product)[] | null;
+  products?: (number | Product)[] | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'threeItemGrid';
@@ -675,7 +918,7 @@ export interface BannerBlock {
  * via the `definition` "FormBlock".
  */
 export interface FormBlock {
-  form: string | Form;
+  form: number | Form;
   enableIntro?: boolean | null;
   introContent?: {
     root: {
@@ -701,7 +944,7 @@ export interface FormBlock {
  * via the `definition` "forms".
  */
 export interface Form {
-  id: string;
+  id: number;
   title: string;
   fields?:
     | (
@@ -872,16 +1115,50 @@ export interface Form {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "variantTypes".
+ */
+export interface VariantType {
+  id: number;
+  label: string;
+  name: string;
+  options?: {
+    docs?: (number | VariantOption)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
+  };
+  updatedAt: string;
+  createdAt: string;
+  deletedAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "variantOptions".
+ */
+export interface VariantOption {
+  id: number;
+  _variantOptions_options_order?: string | null;
+  variantType: number | VariantType;
+  label: string;
+  /**
+   * should be defaulted or dynamic based on label
+   */
+  value: string;
+  updatedAt: string;
+  createdAt: string;
+  deletedAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "variants".
  */
 export interface Variant {
-  id: string;
+  id: number;
   /**
    * Used for administrative purposes, not shown to customers. This is populated by default.
    */
   title?: string | null;
-  product: string | Product;
-  options: (string | VariantOption)[];
+  product: number | Product;
+  options: (number | VariantOption)[];
   inventory?: number | null;
   priceInUSDEnabled?: boolean | null;
   priceInUSD?: number | null;
@@ -895,11 +1172,11 @@ export interface Variant {
  * via the `definition` "transactions".
  */
 export interface Transaction {
-  id: string;
+  id: number;
   items?:
     | {
-        product?: (string | null) | Product;
-        variant?: (string | null) | Variant;
+        product?: (number | null) | Product;
+        variant?: (number | null) | Variant;
         quantity: number;
         id?: string | null;
       }[]
@@ -923,10 +1200,10 @@ export interface Transaction {
     phone?: string | null;
   };
   status: 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired' | 'refunded';
-  customer?: (string | null) | User;
+  customer?: (number | null) | User;
   customerEmail?: string | null;
-  order?: (string | null) | Order;
-  cart?: (string | null) | Cart;
+  order?: (number | null) | Order;
+  cart?: (number | null) | Cart;
   amount?: number | null;
   currency?: 'USD' | null;
   updatedAt: string;
@@ -937,17 +1214,17 @@ export interface Transaction {
  * via the `definition` "carts".
  */
 export interface Cart {
-  id: string;
+  id: number;
   items?:
     | {
-        product?: (string | null) | Product;
-        variant?: (string | null) | Variant;
+        product?: (number | null) | Product;
+        variant?: (number | null) | Variant;
         quantity: number;
         id?: string | null;
       }[]
     | null;
   secret?: string | null;
-  customer?: (string | null) | User;
+  customer?: (number | null) | User;
   purchasedAt?: string | null;
   status?: ('active' | 'purchased' | 'abandoned') | null;
   subtotal?: number | null;
@@ -960,8 +1237,8 @@ export interface Cart {
  * via the `definition` "addresses".
  */
 export interface Address {
-  id: string;
-  customer?: (string | null) | User;
+  id: number;
+  customer?: (number | null) | User;
   title?: string | null;
   firstName?: string | null;
   lastName?: string | null;
@@ -1018,11 +1295,52 @@ export interface Address {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "requests".
+ */
+export interface Request {
+  id: number;
+  status: 'new' | 'inProgress' | 'closed';
+  name?: string | null;
+  company?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  comment?: string | null;
+  items: {
+    product: number | Product;
+    title: string;
+    variant?: (number | null) | Variant;
+    variantLabel?: string | null;
+    quantity: number;
+    priceInUSD?: number | null;
+    id?: string | null;
+  }[];
+  subtotal?: number | null;
+  customer?: (number | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-messages".
+ */
+export interface ContactMessage {
+  id: number;
+  name?: string | null;
+  company?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  message: string;
+  sourcePage?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "form-submissions".
  */
 export interface FormSubmission {
-  id: string;
-  form: string | Form;
+  id: number;
+  form: number | Form;
   submissionData?:
     | {
         field: string;
@@ -1038,7 +1356,7 @@ export interface FormSubmission {
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
-  id: string;
+  id: number;
   key: string;
   data:
     | {
@@ -1055,68 +1373,76 @@ export interface PayloadKv {
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
-  id: string;
+  id: number;
   document?:
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
       } | null)
     | ({
         relationTo: 'pages';
-        value: string | Page;
+        value: number | Page;
       } | null)
     | ({
         relationTo: 'categories';
-        value: string | Category;
+        value: number | Category;
       } | null)
     | ({
         relationTo: 'media';
-        value: string | Media;
+        value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'requests';
+        value: number | Request;
+      } | null)
+    | ({
+        relationTo: 'contact-messages';
+        value: number | ContactMessage;
       } | null)
     | ({
         relationTo: 'forms';
-        value: string | Form;
+        value: number | Form;
       } | null)
     | ({
         relationTo: 'form-submissions';
-        value: string | FormSubmission;
+        value: number | FormSubmission;
       } | null)
     | ({
         relationTo: 'addresses';
-        value: string | Address;
+        value: number | Address;
       } | null)
     | ({
         relationTo: 'variants';
-        value: string | Variant;
+        value: number | Variant;
       } | null)
     | ({
         relationTo: 'variantTypes';
-        value: string | VariantType;
+        value: number | VariantType;
       } | null)
     | ({
         relationTo: 'variantOptions';
-        value: string | VariantOption;
+        value: number | VariantOption;
       } | null)
     | ({
         relationTo: 'products';
-        value: string | Product;
+        value: number | Product;
       } | null)
     | ({
         relationTo: 'carts';
-        value: string | Cart;
+        value: number | Cart;
       } | null)
     | ({
         relationTo: 'orders';
-        value: string | Order;
+        value: number | Order;
       } | null)
     | ({
         relationTo: 'transactions';
-        value: string | Transaction;
+        value: number | Transaction;
       } | null);
   globalSlug?: string | null;
   user: {
     relationTo: 'users';
-    value: string | User;
+    value: number | User;
   };
   updatedAt: string;
   createdAt: string;
@@ -1126,10 +1452,10 @@ export interface PayloadLockedDocument {
  * via the `definition` "payload-preferences".
  */
 export interface PayloadPreference {
-  id: string;
+  id: number;
   user: {
     relationTo: 'users';
-    value: string | User;
+    value: number | User;
   };
   key?: string | null;
   value?:
@@ -1149,7 +1475,7 @@ export interface PayloadPreference {
  * via the `definition` "payload-migrations".
  */
 export interface PayloadMigration {
-  id: string;
+  id: number;
   name?: string | null;
   batch?: number | null;
   updatedAt: string;
@@ -1214,11 +1540,14 @@ export interface PagesSelect<T extends boolean = true> {
   layout?:
     | T
     | {
+        aboutCompany?: T | AboutCompanyBlockSelect<T>;
         cta?: T | CallToActionBlockSelect<T>;
         content?: T | ContentBlockSelect<T>;
+        contactsHub?: T | ContactsHubBlockSelect<T>;
         mediaBlock?: T | MediaBlockSelect<T>;
         archive?: T | ArchiveBlockSelect<T>;
         carousel?: T | CarouselBlockSelect<T>;
+        serviceCenter?: T | ServiceCenterBlockSelect<T>;
         threeItemGrid?: T | ThreeItemGridBlockSelect<T>;
         banner?: T | BannerBlockSelect<T>;
         formBlock?: T | FormBlockSelect<T>;
@@ -1235,6 +1564,89 @@ export interface PagesSelect<T extends boolean = true> {
   updatedAt?: T;
   createdAt?: T;
   _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "AboutCompanyBlock_select".
+ */
+export interface AboutCompanyBlockSelect<T extends boolean = true> {
+  hero?:
+    | T
+    | {
+        eyebrow?: T;
+        title?: T;
+        paragraphs?:
+          | T
+          | {
+              text?: T;
+              id?: T;
+            };
+        primaryButtonLabel?: T;
+        primaryButtonUrl?: T;
+        secondaryButtonLabel?: T;
+        secondaryButtonUrl?: T;
+        heroImage?: T;
+        visualTags?:
+          | T
+          | {
+              label?: T;
+              id?: T;
+            };
+      };
+  facts?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        id?: T;
+      };
+  sections?:
+    | T
+    | {
+        heading?: T;
+        surfaceStyle?: T;
+        paragraphs?:
+          | T
+          | {
+              text?: T;
+              id?: T;
+            };
+        id?: T;
+      };
+  partners?:
+    | T
+    | {
+        heading?: T;
+        paragraphs?:
+          | T
+          | {
+              text?: T;
+              id?: T;
+            };
+        points?:
+          | T
+          | {
+              label?: T;
+              id?: T;
+            };
+        buttonLabel?: T;
+        buttonUrl?: T;
+      };
+  final?:
+    | T
+    | {
+        heading?: T;
+        paragraphs?:
+          | T
+          | {
+              text?: T;
+              id?: T;
+            };
+        buttonLabel?: T;
+        buttonUrl?: T;
+      };
+  id?: T;
+  blockName?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1288,6 +1700,78 @@ export interface ContentBlockSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ContactsHubBlock_select".
+ */
+export interface ContactsHubBlockSelect<T extends boolean = true> {
+  hero?:
+    | T
+    | {
+        eyebrow?: T;
+        title?: T;
+        description?: T;
+        buttonLabel?: T;
+        buttonUrl?: T;
+      };
+  heroContacts?:
+    | T
+    | {
+        phoneLabel?: T;
+        phone?: T;
+        emailLabel?: T;
+        email?: T;
+      };
+  directions?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        id?: T;
+      };
+  mainContacts?:
+    | T
+    | {
+        heading?: T;
+        description?: T;
+        phoneLabel?: T;
+        phone?: T;
+        emailLabel?: T;
+        email?: T;
+      };
+  requisites?:
+    | T
+    | {
+        heading?: T;
+        nameLabel?: T;
+        name?: T;
+        innLabel?: T;
+        inn?: T;
+        ogrnLabel?: T;
+        ogrn?: T;
+        emailLabel?: T;
+        email?: T;
+        phoneLabel?: T;
+        phone?: T;
+      };
+  form?:
+    | T
+    | {
+        heading?: T;
+        description?: T;
+        buttonLabel?: T;
+      };
+  final?:
+    | T
+    | {
+        heading?: T;
+        description?: T;
+        buttonLabel?: T;
+        buttonUrl?: T;
+      };
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "MediaBlock_select".
  */
 export interface MediaBlockSelect<T extends boolean = true> {
@@ -1321,6 +1805,74 @@ export interface CarouselBlockSelect<T extends boolean = true> {
   selectedDocs?: T;
   populatedDocs?: T;
   populatedDocsTotal?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ServiceCenterBlock_select".
+ */
+export interface ServiceCenterBlockSelect<T extends boolean = true> {
+  hero?:
+    | T
+    | {
+        eyebrow?: T;
+        title?: T;
+        paragraphs?:
+          | T
+          | {
+              text?: T;
+              id?: T;
+            };
+        buttonLabel?: T;
+        buttonUrl?: T;
+        heroImage?: T;
+        visualTags?:
+          | T
+          | {
+              label?: T;
+              id?: T;
+            };
+      };
+  cards?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        id?: T;
+      };
+  sections?:
+    | T
+    | {
+        heading?: T;
+        paragraphs?:
+          | T
+          | {
+              text?: T;
+              id?: T;
+            };
+        id?: T;
+      };
+  serviceRequest?:
+    | T
+    | {
+        heading?: T;
+        description?: T;
+        steps?:
+          | T
+          | {
+              label?: T;
+              id?: T;
+            };
+      };
+  final?:
+    | T
+    | {
+        heading?: T;
+        description?: T;
+        buttonLabel?: T;
+        buttonUrl?: T;
+      };
   id?: T;
   blockName?: T;
 }
@@ -1360,6 +1912,9 @@ export interface FormBlockSelect<T extends boolean = true> {
  */
 export interface CategoriesSelect<T extends boolean = true> {
   title?: T;
+  parentCategory?: T;
+  dropdownImage?: T;
+  catalogImage?: T;
   generateSlug?: T;
   slug?: T;
   updatedAt?: T;
@@ -1383,6 +1938,47 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "requests_select".
+ */
+export interface RequestsSelect<T extends boolean = true> {
+  status?: T;
+  name?: T;
+  company?: T;
+  phone?: T;
+  email?: T;
+  comment?: T;
+  items?:
+    | T
+    | {
+        product?: T;
+        title?: T;
+        variant?: T;
+        variantLabel?: T;
+        quantity?: T;
+        priceInUSD?: T;
+        id?: T;
+      };
+  subtotal?: T;
+  customer?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-messages_select".
+ */
+export interface ContactMessagesSelect<T extends boolean = true> {
+  name?: T;
+  company?: T;
+  phone?: T;
+  email?: T;
+  message?: T;
+  sourcePage?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1599,15 +2195,14 @@ export interface VariantOptionsSelect<T extends boolean = true> {
  * via the `definition` "products_select".
  */
 export interface ProductsSelect<T extends boolean = true> {
+  brand?: T;
+  model?: T;
   title?: T;
+  descriptionMode?: T;
   description?: T;
-  gallery?:
-    | T
-    | {
-        image?: T;
-        variantOption?: T;
-        id?: T;
-      };
+  extraDescription?: T;
+  descriptionHTML?: T;
+  gallery?: T;
   layout?:
     | T
     | {
@@ -1622,6 +2217,17 @@ export interface ProductsSelect<T extends boolean = true> {
   priceInUSDEnabled?: T;
   priceInUSD?: T;
   relatedProducts?: T;
+  specificationsTitle?: T;
+  specificationsView?: T;
+  specificationsBulkPaste?: T;
+  specifications?:
+    | T
+    | {
+        name?: T;
+        value?: T;
+        group?: T;
+        id?: T;
+      };
   meta?:
     | T
     | {
@@ -1786,7 +2392,7 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
  * via the `definition` "header".
  */
 export interface Header {
-  id: string;
+  id: number;
   navItems?:
     | {
         link: {
@@ -1794,7 +2400,7 @@ export interface Header {
           newTab?: boolean | null;
           reference?: {
             relationTo: 'pages';
-            value: string | Page;
+            value: number | Page;
           } | null;
           url?: string | null;
           label: string;
@@ -1802,6 +2408,10 @@ export interface Header {
         id?: string | null;
       }[]
     | null;
+  /**
+   * Выберите категории, которые должны показываться в кнопке "Каталог" в шапке.
+   */
+  catalogCategories?: (number | Category)[] | null;
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -1810,7 +2420,18 @@ export interface Header {
  * via the `definition` "footer".
  */
 export interface Footer {
-  id: string;
+  id: number;
+  aboutDescription: string;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  primaryCTA: {
+    label: string;
+    url: string;
+  };
+  secondaryCTA: {
+    label: string;
+    url: string;
+  };
   navItems?:
     | {
         link: {
@@ -1818,7 +2439,7 @@ export interface Footer {
           newTab?: boolean | null;
           reference?: {
             relationTo: 'pages';
-            value: string | Page;
+            value: number | Page;
           } | null;
           url?: string | null;
           label: string;
@@ -1848,6 +2469,7 @@ export interface HeaderSelect<T extends boolean = true> {
             };
         id?: T;
       };
+  catalogCategories?: T;
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;
@@ -1857,6 +2479,21 @@ export interface HeaderSelect<T extends boolean = true> {
  * via the `definition` "footer_select".
  */
 export interface FooterSelect<T extends boolean = true> {
+  aboutDescription?: T;
+  contactPhone?: T;
+  contactEmail?: T;
+  primaryCTA?:
+    | T
+    | {
+        label?: T;
+        url?: T;
+      };
+  secondaryCTA?:
+    | T
+    | {
+        label?: T;
+        url?: T;
+      };
   navItems?:
     | T
     | {

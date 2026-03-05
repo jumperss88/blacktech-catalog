@@ -5,12 +5,19 @@ import { RichText } from '@/components/RichText'
 import { AddToCart } from '@/components/Cart/AddToCart'
 import { Price } from '@/components/Price'
 import React, { Suspense } from 'react'
+import { ChevronDown } from 'lucide-react'
 
 import { VariantSelector } from './VariantSelector'
 import { useCurrency } from '@payloadcms/plugin-ecommerce/client/react'
 import { StockIndicator } from '@/components/product/StockIndicator'
 
-export function ProductDescription({ product }: { product: Product }) {
+type Props = {
+  product: Product
+  hasExtraDescription: boolean
+  hasSpecifications: boolean
+}
+
+export function ProductDescription({ hasExtraDescription, hasSpecifications, product }: Props) {
   const { currency } = useCurrency()
   let amount = 0,
     lowestAmount = 0,
@@ -51,22 +58,48 @@ export function ProductDescription({ product }: { product: Product }) {
     amount = product[priceField]
   }
 
+  const displayName =
+    [product.brand, product.model]
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .join(' ')
+      .trim() || product.title
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-        <h1 className="text-2xl font-medium">{product.title}</h1>
-        <div className="uppercase font-mono">
-          {hasVariants ? (
-            <Price highestAmount={highestAmount} lowestAmount={lowestAmount} />
-          ) : (
-            <Price amount={amount} />
-          )}
-        </div>
-      </div>
+      <h1 className="product-detail-title text-[2rem] md:text-[2.15rem] font-semibold leading-tight">
+        {displayName}
+      </h1>
       {product.description ? (
-        <RichText className="" data={product.description} enableGutter={false} />
+        <RichText
+          className="product-description-richtext"
+          data={product.description}
+          enableGutter={false}
+        />
       ) : null}
-      <hr />
+
+      {hasExtraDescription || hasSpecifications ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {hasExtraDescription ? (
+            <a
+              href="#product-description"
+              className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              Описание
+              <ChevronDown className="h-4 w-4" />
+            </a>
+          ) : null}
+          {hasSpecifications ? (
+            <a
+              href="#product-specifications"
+              className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              Характеристики
+              <ChevronDown className="h-4 w-4" />
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+
       {hasVariants && (
         <>
           <Suspense fallback={null}>
@@ -76,16 +109,22 @@ export function ProductDescription({ product }: { product: Product }) {
           <hr />
         </>
       )}
-      <div className="flex items-center justify-between">
-        <Suspense fallback={null}>
-          <StockIndicator product={product} />
-        </Suspense>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <Suspense fallback={null}>
-          <AddToCart product={product} />
-        </Suspense>
+      <div className="flex w-full justify-end">
+        <div className="flex flex-col items-end gap-3">
+          <div className="font-mono uppercase">
+            {hasVariants ? (
+              <Price className="product-detail-price" highestAmount={highestAmount} lowestAmount={lowestAmount} />
+            ) : (
+              <Price className="product-detail-price" amount={amount} />
+            )}
+          </div>
+          <Suspense fallback={null}>
+            <StockIndicator product={product} />
+          </Suspense>
+          <Suspense fallback={null}>
+            <AddToCart product={product} />
+          </Suspense>
+        </div>
       </div>
     </div>
   )

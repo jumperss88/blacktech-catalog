@@ -8,13 +8,14 @@ export const Code: Block = {
       name: 'language',
       type: 'select',
       defaultValue: 'typescript',
+      label: 'Язык',
       options: [
         {
-          label: 'Typescript',
+          label: 'TypeScript',
           value: 'typescript',
         },
         {
-          label: 'Javascript',
+          label: 'JavaScript',
           value: 'javascript',
         },
         {
@@ -30,4 +31,8 @@ export const Code: Block = {
       required: true,
     },
   ],
+  labels: {
+    singular: 'Код',
+    plural: 'Блоки кода',
+  },
 }

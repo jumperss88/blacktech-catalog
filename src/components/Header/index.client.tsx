@@ -1,63 +1,130 @@
 'use client'
-import { CMSLink } from '@/components/Link'
+
+import { Button } from '@/components/ui/button'
 import { Cart } from '@/components/Cart'
-import { OpenCartButton } from '@/components/Cart/OpenCart'
 import Link from 'next/link'
 import React, { Suspense } from 'react'
 
 import { MobileMenu } from './MobileMenu'
-import type { Header } from 'src/payload-types'
-
-import { LogoIcon } from '@/components/icons/logo'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/utilities/cn'
+import { ChevronDown } from 'lucide-react'
+import { SearchOverlay } from './SearchOverlay'
 
 type Props = {
-  header: Header
+  categories: {
+    children?: {
+      dropdownImageUrl?: string
+      href: string
+      id: string
+      title: string
+    }[]
+    dropdownImageUrl?: string
+    href: string
+    id: string
+    title: string
+  }[]
+  menu: {
+    href: string
+    id: string
+    label: string
+  }[]
 }
 
-export function HeaderClient({ header }: Props) {
-  const menu = header.navItems || []
+export function HeaderClient({ categories, menu }: Props) {
   const pathname = usePathname()
 
   return (
-    <div className="relative z-20 border-b">
-      <nav className="flex items-center md:items-end justify-between container pt-2">
+    <div className="sticky top-0 z-50 border-b bg-background/92 backdrop-blur-md supports-[backdrop-filter]:bg-background/82">
+      <nav className="container flex h-16 items-center justify-between">
         <div className="block flex-none md:hidden">
-          <Suspense fallback={null}>
-            <MobileMenu menu={menu} />
-          </Suspense>
+          <MobileMenu categories={categories} menu={menu} />
         </div>
-        <div className="flex w-full items-end justify-between">
-          <div className="flex w-full items-end gap-6 md:w-1/3">
-            <Link className="flex w-full items-center justify-center pt-4 pb-4 md:w-auto" href="/">
-              <LogoIcon className="w-6 h-auto" />
+        <div className="flex w-full items-center justify-between gap-4">
+          <div className="flex w-full items-center gap-6 md:flex-1">
+            <Link className="flex w-full items-center justify-center md:w-auto" href="/">
+              <img
+                src="/blacklogo.svg"
+                alt="Black Tech Light"
+                className="headerBrandLogo"
+              />
             </Link>
-            {menu.length ? (
-              <ul className="hidden gap-4 text-sm md:flex md:items-center">
-                {menu.map((item) => (
-                  <li key={item.id}>
-                    <CMSLink
-                      {...item.link}
-                      size={'clear'}
-                      className={cn('relative navLink', {
-                        active:
-                          item.link.url && item.link.url !== '/'
-                            ? pathname.includes(item.link.url)
-                            : false,
-                      })}
-                      appearance="nav"
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+            <ul className="hidden gap-4 text-sm md:flex md:items-center">
+              {menu.map((item) => (
+                <li key={item.id}>
+                  <Link
+                    href={item.href}
+                    className={cn('relative navLink px-0.5 py-1', {
+                      active: item.href !== '/' ? pathname.includes(item.href) : false,
+                    })}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <div className="flex justify-end md:w-1/3 gap-4">
-            <Suspense fallback={<OpenCartButton />}>
-              <Cart />
+          <div className="flex shrink-0 items-center justify-end gap-2">
+            <Suspense fallback={null}>
+              <SearchOverlay />
             </Suspense>
+            <Cart />
+            <div className="catalogDropdown">
+              <Button
+                asChild
+                className="hidden md:inline-flex gap-2 font-mono text-xs font-normal uppercase tracking-widest"
+                variant="outline"
+              >
+                <Link href="/catalog">
+                  Каталог <ChevronDown className="h-4 w-4" />
+                </Link>
+              </Button>
+              <div className="catalogMenu">
+                <ul>
+                  <li>
+                    <Link className="catalogMenuLink catalogMenuAllLink" href="/catalog">
+                      Все категории
+                    </Link>
+                  </li>
+                  {categories.map((category) => (
+                    <li key={category.id} className="catalogMenuItem">
+                      <Link className="catalogMenuLink catalogMenuParentLink" href={category.href}>
+                        {category.children?.length ? <ChevronDown className="catalogMenuParentArrow h-4 w-4" /> : null}
+                        <span>{category.title}</span>
+                        {category.dropdownImageUrl ? (
+                          <img
+                            src={category.dropdownImageUrl}
+                            alt={category.title}
+                            className="catalogMenuThumb"
+                          />
+                        ) : null}
+                      </Link>
+                      {category.children?.length ? (
+                        <div className="catalogSubmenu">
+                          <ul>
+                            {category.children.map((child) => (
+                              <li key={child.id}>
+                                <Link className="catalogMenuLink catalogSubmenuLink" href={child.href}>
+                                  {child.dropdownImageUrl ? (
+                                    <img
+                                      src={child.dropdownImageUrl}
+                                      alt={child.title}
+                                      className="catalogMenuThumb"
+                                    />
+                                  ) : null}
+                                  {child.title}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       </nav>

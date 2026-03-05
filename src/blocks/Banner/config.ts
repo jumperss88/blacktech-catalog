@@ -13,11 +13,12 @@ export const Banner: Block = {
       name: 'style',
       type: 'select',
       defaultValue: 'info',
+      label: 'Тип баннера',
       options: [
-        { label: 'Info', value: 'info' },
-        { label: 'Warning', value: 'warning' },
-        { label: 'Error', value: 'error' },
-        { label: 'Success', value: 'success' },
+        { label: 'Информация', value: 'info' },
+        { label: 'Предупреждение', value: 'warning' },
+        { label: 'Ошибка', value: 'error' },
+        { label: 'Успех', value: 'success' },
       ],
       required: true,
     },
@@ -34,4 +35,8 @@ export const Banner: Block = {
     },
   ],
   interfaceName: 'BannerBlock',
+  labels: {
+    singular: 'Баннер',
+    plural: 'Баннеры',
+  },
 }

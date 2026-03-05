@@ -5,13 +5,14 @@ import React from 'react'
 import clsx from 'clsx'
 import { Media } from '@/components/Media'
 import { Price } from '@/components/Price'
+import { AddToCart } from '@/components/Cart/AddToCart'
 
 type Props = {
   product: Partial<Product>
 }
 
 export const ProductGridItem: React.FC<Props> = ({ product }) => {
-  const { gallery, priceInUSD, title } = product
+  const { brand, description, gallery, model, priceInUSD, title } = product
 
   let price = priceInUSD
 
@@ -29,34 +30,85 @@ export const ProductGridItem: React.FC<Props> = ({ product }) => {
     }
   }
 
-  const image =
-    gallery?.[0]?.image && typeof gallery[0]?.image !== 'string' ? gallery[0]?.image : false
+  const image = gallery?.[0] && typeof gallery[0] !== 'string' ? gallery[0] : false
+
+  const brandName = typeof brand === 'string' ? brand.trim() : ''
+  const modelName = typeof model === 'string' ? model.trim() : ''
+  const displayName = title?.trim() || ''
+
+  const pickText = (value: unknown): string => {
+    if (!value) return ''
+    if (typeof value === 'string') return value
+    if (Array.isArray(value)) return value.map((item) => pickText(item)).join(' ')
+
+    if (typeof value === 'object') {
+      const record = value as Record<string, unknown>
+      const ownText = typeof record.text === 'string' ? record.text : ''
+
+      if (record.root) {
+        return `${ownText} ${pickText(record.root)}`.trim()
+      }
+
+      if (record.children) {
+        return `${ownText} ${pickText(record.children)}`.trim()
+      }
+
+      return ownText
+    }
+
+    return ''
+  }
+
+  const shortDescription = pickText(description).replace(/\s+/g, ' ').trim()
 
   return (
-    <Link className="relative inline-block h-full w-full group" href={`/products/${product.slug}`}>
-      {image ? (
-        <Media
-          className={clsx(
-            'relative aspect-square object-cover border rounded-2xl p-8 bg-primary-foreground',
-          )}
-          height={80}
-          imgClassName={clsx('h-full w-full object-cover rounded-2xl', {
-            'transition duration-300 ease-in-out group-hover:scale-102': true,
-          })}
-          resource={image}
-          width={80}
-        />
-      ) : null}
+    <article className="product-shop-card group">
+      <Link className="product-shop-card-link" href={`/products/${product.slug}`}>
+        <div className="product-shop-card-media">
+          {image ? (
+            <Media
+              className={clsx('relative h-full w-full')}
+              fill
+              imgClassName={clsx('h-full w-full object-contain -translate-y-2 scale-[1.22]', {
+                'transition duration-300 ease-in-out group-hover:scale-[1.27]': true,
+              })}
+              resource={image}
+            />
+          ) : null}
+        </div>
 
-      <div className="font-mono text-primary/50 group-hover:text-primary flex justify-between items-center mt-4">
-        <div>{title}</div>
+        <div className="product-shop-card-text">
+          {shortDescription ? <p className="product-shop-card-desc line-clamp-4">{shortDescription}</p> : null}
 
-        {typeof price === 'number' && (
-          <div className="">
-            <Price amount={price} />
+          <div className="product-shop-card-body">
+            <h3 className="product-card-title leading-tight min-w-0">
+              {brandName || modelName ? (
+                <>
+                  <span className="product-shop-card-brand line-clamp-1">{brandName || displayName}</span>
+                  {modelName ? (
+                    <span className="product-shop-card-model line-clamp-1">{modelName}</span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="line-clamp-2">{displayName}</span>
+              )}
+            </h3>
           </div>
-        )}
+        </div>
+      </Link>
+
+      <div className="product-shop-card-footer">
+        <div className="product-shop-card-price-wrap">
+          {typeof price === 'number' ? (
+            <Price as="span" className="product-card-price" amount={price} />
+          ) : (
+            <span className="product-shop-card-price-empty">Цена по запросу</span>
+          )}
+        </div>
+        <div className="product-shop-card-actions">
+          <AddToCart iconOnly product={product as Product} />
+        </div>
       </div>
-    </Link>
+    </article>
   )
 }

@@ -1167,6 +1167,8 @@ export const productTshirtData: (
       },
     },
     gallery: galleryImages,
+    brand: 'Payload',
+    model: 'Tshirt',
     title: 'Tshirt',
     slug: 'tshirt',
     priceInUSDEnabled: true,

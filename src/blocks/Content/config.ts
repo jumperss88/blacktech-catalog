@@ -16,22 +16,23 @@ const columnFields: Field[] = [
     defaultValue: 'oneThird',
     options: [
       {
-        label: 'One Third',
+        label: 'Одна треть',
         value: 'oneThird',
       },
       {
-        label: 'Half',
+        label: 'Половина',
         value: 'half',
       },
       {
-        label: 'Two Thirds',
+        label: 'Две трети',
         value: 'twoThirds',
       },
       {
-        label: 'Full',
+        label: 'Полная ширина',
         value: 'full',
       },
     ],
+    label: 'Ширина колонки',
   },
   {
     name: 'richText',
@@ -51,6 +52,7 @@ const columnFields: Field[] = [
   {
     name: 'enableLink',
     type: 'checkbox',
+    label: 'Показывать ссылку',
   },
   link({
     overrides: {
@@ -64,10 +66,15 @@ const columnFields: Field[] = [
 export const Content: Block = {
   slug: 'content',
   interfaceName: 'ContentBlock',
+  labels: {
+    singular: 'Контент',
+    plural: 'Контентные блоки',
+  },
   fields: [
     {
       name: 'columns',
       type: 'array',
+      label: 'Колонки',
       admin: {
         initCollapsed: true,
       },

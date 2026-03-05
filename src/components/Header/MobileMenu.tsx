@@ -1,35 +1,39 @@
 'use client'
 
-import type { Header } from '@/payload-types'
-
-import { CMSLink } from '@/components/Link'
-import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { useAuth } from '@/providers/Auth'
 import { MenuIcon } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 
-interface Props {
-  menu: Header['navItems']
+type Props = {
+  categories: {
+    children?: {
+      href: string
+      id: string
+      title: string
+    }[]
+    dropdownImageUrl?: string
+    href: string
+    id: string
+    title: string
+  }[]
+  menu: {
+    href: string
+    id: string
+    label: string
+  }[]
 }
 
-export function MobileMenu({ menu }: Props) {
-  const { user } = useAuth()
-
+export function MobileMenu({ categories, menu }: Props) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const [isOpen, setIsOpen] = useState(false)
-
-  const closeMobileMenu = () => setIsOpen(false)
 
   useEffect(() => {
     const handleResize = () => {
@@ -43,7 +47,7 @@ export function MobileMenu({ menu }: Props) {
 
   useEffect(() => {
     setIsOpen(false)
-  }, [pathname, searchParams])
+  }, [pathname])
 
   return (
     <Sheet onOpenChange={setIsOpen} open={isOpen}>
@@ -53,58 +57,43 @@ export function MobileMenu({ menu }: Props) {
 
       <SheetContent side="left" className="px-4">
         <SheetHeader className="px-0 pt-4 pb-0">
-          <SheetTitle>My Store</SheetTitle>
-
-          <SheetDescription />
+          <SheetTitle>Меню</SheetTitle>
         </SheetHeader>
 
         <div className="py-4">
-          {menu?.length ? (
-            <ul className="flex w-full flex-col">
-              {menu.map((item) => (
-                <li className="py-2" key={item.id}>
-                  <CMSLink {...item.link} appearance="link" />
+          <ul className="flex w-full flex-col gap-2 border-b pb-4">
+            {menu?.map((item) => (
+              <li className="py-1" key={item.id}>
+                <Link href={item.href}>{item.label}</Link>
+              </li>
+            ))}
+            <li className="py-1">
+              <Link href="/catalog">Каталог</Link>
+            </li>
+          </ul>
+
+          <div className="pt-4">
+            <h2 className="text-base font-semibold">Каталог</h2>
+            <ul className="mt-2 flex flex-col gap-2">
+              {categories.map((category) => (
+                <li key={category.id}>
+                  <Link href={category.href}>{category.title}</Link>
+                  {category.children?.length ? (
+                    <ul className="mt-1 ml-3 flex flex-col gap-1">
+                      {category.children.map((child) => (
+                        <li key={child.id}>
+                          <Link className="text-sm opacity-80" href={child.href}>
+                            {child.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </li>
               ))}
             </ul>
-          ) : null}
+          </div>
         </div>
-
-        {user ? (
-          <div className="mt-4">
-            <h2 className="text-xl mb-4">My account</h2>
-            <hr className="my-2" />
-            <ul className="flex flex-col gap-2">
-              <li>
-                <Link href="/orders">Orders</Link>
-              </li>
-              <li>
-                <Link href="/account/addresses">Addresses</Link>
-              </li>
-              <li>
-                <Link href="/account">Manage account</Link>
-              </li>
-              <li className="mt-6">
-                <Button asChild variant="outline">
-                  <Link href="/logout">Log out</Link>
-                </Button>
-              </li>
-            </ul>
-          </div>
-        ) : (
-          <div>
-            <h2 className="text-xl mb-4">My account</h2>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button asChild className="w-full sm:flex-1" variant="outline">
-                <Link href="/login">Log in</Link>
-              </Button>
-              <span className="text-center text-sm text-muted-foreground sm:text-base">or</span>
-              <Button asChild className="w-full sm:flex-1">
-                <Link href="/create-account">Create an account</Link>
-              </Button>
-            </div>
-          </div>
-        )}
       </SheetContent>
     </Sheet>
   )

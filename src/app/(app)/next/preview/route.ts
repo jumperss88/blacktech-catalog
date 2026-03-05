@@ -7,8 +7,6 @@ import { redirect } from 'next/navigation'
 import configPromise from '@payload-config'
 
 export async function GET(req: Request): Promise<Response> {
-  const payload = await getPayload({ config: configPromise })
-
   const { searchParams } = new URL(req.url)
 
   const path = searchParams.get('path')
@@ -27,6 +25,8 @@ export async function GET(req: Request): Promise<Response> {
   if (!path.startsWith('/')) {
     return new Response('This endpoint can only be used for relative previews', { status: 500 })
   }
+
+  const payload = await getPayload({ config: configPromise })
 
   let user
 
