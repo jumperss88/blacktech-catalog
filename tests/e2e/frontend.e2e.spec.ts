@@ -109,22 +109,16 @@ test.describe('Frontend', () => {
     await expect(productInCart).toBeVisible()
   })
 
-  test('can view and sort via search page', async ({ page }) => {
-    await page.goto(`${baseURL}/search`)
-
-    const productCard = page.locator(`a[href="/products/test-product"]`)
-    await productCard.waitFor({ state: 'visible' })
-    await expect(productCard).toBeVisible()
+  test('can view and sort via shop page', async ({ page }) => {
+    await page.goto(`${baseURL}/shop?q=Sort+Probe`)
 
     const firstCard = page.locator('div.grid > a').first()
-    const title = firstCard.locator('div.font-mono > div').first()
-    await expect(title).not.toHaveText('Hoodie')
+    await expect(firstCard).toHaveAttribute('href', '/products/sort-probe-high')
 
-    const priceSort = page.getByText('Price: Low to high')
+    const priceSort = page.getByRole('link', { name: 'Цена: по возрастанию', exact: true })
     await priceSort.click()
-    await expect(page).toHaveURL(/\/search\?sort=priceInUSD/)
-
-    await expect(title).toHaveText('Hoodie')
+    await expect(page).toHaveURL(/\/shop\?q=Sort\+Probe&sort=priceInUSD/)
+    await expect(firstCard).toHaveAttribute('href', '/products/sort-probe-low')
   })
 
   test('authenticated users can view account', async ({ page }) => {
