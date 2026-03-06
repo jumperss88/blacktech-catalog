@@ -41,8 +41,8 @@ corepack pnpm run lint
 
 Перед деплоем:
 ```bash
+corepack pnpm run test:e2e:install-browsers
 corepack pnpm run check:deploy
-corepack pnpm run test:e2e
 ```
 
 ---
