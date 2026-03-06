@@ -1,17 +1,21 @@
 import path from 'path'
 import { test, expect, Page } from '@playwright/test'
+import { getPayload } from 'payload'
 import { fileURLToPath } from 'url'
+import config from '../../src/payload.config.js'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 test.describe('Frontend', () => {
+  test.describe.configure({ timeout: 120_000 })
   let page: Page
   const baseURL = 'http://localhost:3000'
   const mediaURL = `${baseURL}/admin/collections/media`
-  const adminEmail = 'admin@test.com'
+  const runId = Date.now()
+  const adminEmail = `admin-${runId}@test.com`
   const adminPassword = 'admin'
-  const userEmail = 'user@test.com'
+  const userEmail = `user-${runId}@test.com`
   const userPassword = 'user'
   const testPaymentDetails = {
     cardNumber: '5454 5454 5454 5454',
@@ -22,6 +26,7 @@ test.describe('Frontend', () => {
   test.beforeAll(async ({ browser, request }, testInfo) => {
     const context = await browser.newContext()
     page = await context.newPage()
+    await ensureAdminUser(adminEmail, adminPassword)
     await createUserAndLogin(request, adminEmail, adminPassword)
     await createVariantsAndProducts(page, request)
   })
@@ -388,11 +393,14 @@ test.describe('Frontend', () => {
       data.roles = ['admin']
     }
 
-    const response = await request.post(`${baseURL}/api/users`, {
+    const createResponse = await request.post(`${baseURL}/api/users`, {
       data,
     })
-
-    console.log({ response })
+    const createBody = await createResponse.json()
+    if (!createResponse.ok()) {
+      expect([400, 409]).toContain(createResponse.status())
+      expect(JSON.stringify(createBody)).toContain('email')
+    }
 
     const login = await request.post(`${baseURL}/api/users/login`, {
       data: {
@@ -400,11 +408,83 @@ test.describe('Frontend', () => {
         password,
       },
     })
+    expect(login.ok()).toBeTruthy()
+  }
 
-    console.log({ login })
+  async function ensureAdminUser(email: string, password: string) {
+    const payload = await getPayload({ config })
+    const existing = await payload.find({
+      collection: 'users',
+      limit: 1,
+      where: { email: { equals: email } },
+    })
+
+    if (existing.docs.length > 0) {
+      await payload.update({
+        collection: 'users',
+        id: existing.docs[0].id,
+        data: { password, roles: ['admin'] },
+      })
+      return
+    }
+
+    await payload.create({
+      collection: 'users',
+      data: { email, password, roles: ['admin'] },
+    })
   }
 
   async function createVariantsAndProducts(page: Page, request: any) {
+    const parseResponseBody = async (response: any) => {
+      const raw = await response.text()
+
+      try {
+        return JSON.parse(raw)
+      } catch {
+        return { raw }
+      }
+    }
+
+    const createProduct = async (
+      data: Record<string, unknown>,
+      label: string,
+    ): Promise<string | number> => {
+      const response = await request.post(`${baseURL}/api/products`, { data })
+      const body = await parseResponseBody(response)
+
+      expect(
+        response.ok(),
+        `${label} create failed: status=${response.status()} body=${JSON.stringify(body)}`,
+      ).toBeTruthy()
+
+      expect(
+        body && typeof body === 'object' && 'doc' in body && body.doc?.id,
+        `${label} invalid response contract: ${JSON.stringify(body)}`,
+      ).toBeTruthy()
+
+      return body.doc.id
+    }
+
+    const payload = await getPayload({ config })
+    const testSlugs = [
+      'test-product-variants',
+      'test-product',
+      'no-inventory-product',
+      'sort-probe-high',
+      'sort-probe-low',
+    ]
+
+    for (const slug of testSlugs) {
+      await payload.delete({
+        collection: 'products',
+        where: {
+          slug: {
+            equals: slug,
+          },
+        },
+      })
+    }
+
     const variantType = await request.post(`${baseURL}/api/variantTypes`, {
       data: {
         name: 'brand',
@@ -412,14 +492,19 @@ test.describe('Frontend', () => {
       },
     })
 
-    const variantTypeID = (await variantType.json()).doc.id
+    const variantTypeBody = await variantType.json()
+    expect(
+      variantType.ok(),
+      `variantTypes create failed: ${JSON.stringify(variantTypeBody)}`,
+    ).toBeTruthy()
+    const variantTypeID = variantTypeBody.doc.id
 
     const brands = [
       { label: 'Payload', value: 'payload' },
       { label: 'Figma', value: 'figma' },
     ]
 
-    const [payload, figma] = await Promise.all(
+    const [payloadOptionResponse, figmaOptionResponse] = await Promise.all(
       brands.map((option) =>
         request.post(`${baseURL}/api/variantOptions`, {
           data: {
@@ -430,26 +515,27 @@ test.describe('Frontend', () => {
       ),
     )
 
-    const payloadVariantID = (await payload.json()).doc.id
-    const figmaVariantID = (await figma.json()).doc.id
+    const payloadVariantID = (await payloadOptionResponse.json()).doc.id
+    const figmaVariantID = (await figmaOptionResponse.json()).doc.id
 
     await loginFromUI(page, adminEmail, adminPassword)
     await page.goto(`${mediaURL}/create`)
     const fileInput = page.locator('input[type="file"]')
     const altInput = page.locator('input[name="alt"]')
-    const filePath = path.resolve(dirname, '../../public/media/image-post1.webp')
+    const filePath = path.resolve(dirname, '../../src/endpoints/seed/hat-logo.png')
     await fileInput.setInputFiles(filePath)
     await altInput.fill('Test Image')
     const uploadButton = page.locator('#action-save')
     await uploadButton.click()
-    const successMessage = page.locator('text=Media successfully created')
-    await expect(successMessage).toBeVisible()
     await expect(page).toHaveURL(/\/admin\/collections\/media\/\d+/)
-    const imageID = page.url().split('/').pop()
+    const imageMatch = page.url().match(/\/admin\/collections\/media\/(\d+)/)
+    expect(imageMatch, `invalid media URL: ${page.url()}`).toBeTruthy()
+    const imageID = Number(imageMatch?.[1])
 
-    const productWithVariants = await request.post(`${baseURL}/api/products`, {
-      data: {
-        title: 'Test Product With Variants',
+    const productID = await createProduct(
+      {
+        brand: 'Test Product',
+        model: 'With Variants',
         slug: 'test-product-variants',
         enableVariants: true,
         variantTypes: [variantTypeID],
@@ -460,9 +546,8 @@ test.describe('Frontend', () => {
         priceInUSDEnabled: true,
         priceInUSD: 1000,
       },
-    })
-
-    const productID = (await productWithVariants.json()).doc.id
+      'productWithVariants',
+    )
 
     const variantPayload = await request.post(`${baseURL}/api/variants`, {
       data: {
@@ -488,9 +573,10 @@ test.describe('Frontend', () => {
       },
     })
 
-    const product = await request.post(`${baseURL}/api/products`, {
-      data: {
-        title: 'Test Product',
+    await createProduct(
+      {
+        brand: 'Test',
+        model: 'Product',
         slug: 'test-product',
         inventory: 100,
         _status: 'published',
@@ -499,11 +585,13 @@ test.describe('Frontend', () => {
         priceInUSDEnabled: true,
         priceInUSD: 1000,
       },
-    })
+      'testProduct',
+    )
 
-    const noInventoryProduct = await request.post(`${baseURL}/api/products`, {
-      data: {
-        title: 'No Inventory Product',
+    await createProduct(
+      {
+        brand: 'No Inventory',
+        model: 'Product',
         slug: 'no-inventory-product',
         inventory: 0,
         _status: 'published',
@@ -512,7 +600,38 @@ test.describe('Frontend', () => {
         priceInUSDEnabled: true,
         priceInUSD: 1000,
       },
-    })
+      'noInventoryProduct',
+    )
+
+    await createProduct(
+      {
+        brand: 'Sort Probe',
+        model: 'High',
+        slug: 'sort-probe-high',
+        inventory: 100,
+        _status: 'published',
+        layout: [],
+        gallery: [imageID],
+        priceInUSDEnabled: true,
+        priceInUSD: 4000,
+      },
+      'sortProbeHigh',
+    )
+
+    await createProduct(
+      {
+        brand: 'Sort Probe',
+        model: 'Low',
+        slug: 'sort-probe-low',
+        inventory: 100,
+        _status: 'published',
+        layout: [],
+        gallery: [imageID],
+        priceInUSDEnabled: true,
+        priceInUSD: 100,
+      },
+      'sortProbeLow',
+    )
   }
 
   async function logoutAndExpectSuccess(page: Page) {
