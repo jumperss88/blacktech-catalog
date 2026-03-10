@@ -1,19 +1,11 @@
 import type { Product, Variant } from '@/payload-types'
 
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import React from 'react'
 import clsx from 'clsx'
 import { Media } from '@/components/Media'
 import { Price } from '@/components/Price'
-
-const AddToCart = dynamic(
-  () => import('@/components/Cart/AddToCart').then((module) => module.AddToCart),
-  {
-    loading: () => <div aria-hidden="true" className="h-9 w-9 rounded-full border border-border/50" />,
-    ssr: false,
-  },
-)
+import { AddToCartClient } from './AddToCartClient'
 
 type Props = {
   product: Partial<Product>
@@ -114,7 +106,7 @@ export const ProductGridItem: React.FC<Props> = ({ product }) => {
           )}
         </div>
         <div className="product-shop-card-actions">
-          <AddToCart iconOnly product={product as Product} />
+          <AddToCartClient product={product as Product} />
         </div>
       </div>
     </article>
