@@ -56,6 +56,17 @@ export const Image: React.FC<MediaProps> = (props) => {
         .map(([, value]) => `(max-width: ${value}px) ${value}px`)
         .join(', ')
 
+  const normalizedSrc = typeof src === 'string' ? src.trim() : src
+  const hasRenderableSrc =
+    typeof normalizedSrc === 'string'
+      ? normalizedSrc.length > 0
+      : Boolean(normalizedSrc && typeof normalizedSrc === 'object')
+
+  // Guard against runtime throws from next/image when a media relation is present but has no URL yet.
+  if (!hasRenderableSrc) {
+    return null
+  }
+
   return (
     <NextImage
       alt={alt || ''}
@@ -72,7 +83,7 @@ export const Image: React.FC<MediaProps> = (props) => {
       priority={priority}
       quality={90}
       sizes={sizes}
-      src={src}
+      src={normalizedSrc}
       width={!fill ? width || widthFromProps : undefined}
     />
   )
