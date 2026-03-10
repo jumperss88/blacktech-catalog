@@ -1183,7 +1183,11 @@ test.describe('Frontend', () => {
       await variantButton.click()
     }
 
-    const addToCartButton = page.getByRole('button', { name: /Добавить в заявку/i }).first()
+    const addToCartButton = page
+      .locator('button[aria-label="Добавить в заявку"]', {
+        has: page.locator('span', { hasText: 'Добавить в заявку' }),
+      })
+      .first()
     const inlineQuantityInput = page.getByRole('textbox', { name: 'Количество' }).first()
     const decreaseInlineButton = page.getByRole('button', { name: 'Уменьшить количество' }).first()
 
@@ -1252,7 +1256,11 @@ test.describe('Frontend', () => {
   }
 
   async function removeFromCartAndConfirm(page: Page) {
-    const addToCartButton = page.getByRole('button', { name: /Добавить в заявку/i }).first()
+    const addToCartButton = page
+      .locator('button[aria-label="Добавить в заявку"]', {
+        has: page.locator('span', { hasText: 'Добавить в заявку' }),
+      })
+      .first()
     const inlineQuantityInput = page.getByRole('textbox', { name: 'Количество' }).first()
     const reduceQuantityButton = page.getByRole('button', { name: 'Уменьшить количество' }).first()
 
