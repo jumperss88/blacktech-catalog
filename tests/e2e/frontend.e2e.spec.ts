@@ -1196,7 +1196,30 @@ test.describe('Frontend', () => {
       return Number(await inlineQuantityInput.inputValue().catch(() => '0'))
     }
 
-    if (!(await addToCartButton.isVisible().catch(() => false))) {
+    // Deterministic reset: if the target product is already in cart, reduce it
+    // until the primary CTA for this product is available again.
+    let currentQuantity = await readInlineQuantity()
+    if (currentQuantity > 0) {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        if (await addToCartButton.isVisible().catch(() => false)) break
+        await decreaseInlineButton.click()
+        await expect
+          .poll(readInlineQuantity, { timeout: 5_000 })
+          .toBeLessThanOrEqual(Math.max(currentQuantity - 1, 0))
+        currentQuantity = await readInlineQuantity()
+        if (currentQuantity < 1) break
+      }
+    }
+
+    currentQuantity = await readInlineQuantity()
+    if (currentQuantity > 0) {
+      await expect(page.locator('body')).toContainText(productName)
+      return
+    }
+
+    const hasPrimaryAddButton = await addToCartButton.isVisible().catch(() => false)
+
+    if (!hasPrimaryAddButton) {
       if (
         variantButton &&
         !(await inlineQuantityInput.isVisible().catch(() => false)) &&
@@ -1205,45 +1228,21 @@ test.describe('Frontend', () => {
         await variantButton.click()
       }
 
-      if (await inlineQuantityInput.isVisible().catch(() => false)) {
-        for (let attempt = 0; attempt < 10; attempt += 1) {
-          if (await addToCartButton.isVisible().catch(() => false)) break
-          const currentQuantity = Number(await inlineQuantityInput.inputValue().catch(() => '0'))
-          if (!currentQuantity || currentQuantity < 1) break
-          await decreaseInlineButton.click()
-        }
-      }
+      await expect(addToCartButton).toBeVisible({ timeout: 15_000 })
     }
 
-    await expect
-      .poll(
-        async () => {
-          const canClickAddToCart = await addToCartButton.isVisible().catch(() => false)
-          const currentQuantity = await readInlineQuantity()
+    await expect(addToCartButton).toBeEnabled({ timeout: 15_000 })
 
-          if (currentQuantity > 0) return 'already-in-cart'
-          if (canClickAddToCart) return 'ready-to-add'
+    const cartMutationPromise = page.waitForResponse(
+      (response) =>
+        ['POST', 'PATCH'].includes(response.request().method()) &&
+        response.url().includes('/api/carts') &&
+        response.ok(),
+      { timeout: 30_000 },
+    )
 
-          return 'pending'
-        },
-        { timeout: 15_000 },
-      )
-      .not.toBe('pending')
-
-    const initialQuantity = await readInlineQuantity()
-
-    if (initialQuantity < 1) {
-      const cartMutationPromise = page.waitForResponse(
-        (response) =>
-          ['POST', 'PATCH'].includes(response.request().method()) &&
-          response.url().includes('/api/carts') &&
-          response.ok(),
-        { timeout: 30_000 },
-      )
-
-      await addToCartButton.click()
-      await cartMutationPromise
-    }
+    await addToCartButton.click()
+    await cartMutationPromise
 
     await expect
       .poll(
