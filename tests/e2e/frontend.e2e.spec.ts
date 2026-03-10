@@ -126,6 +126,7 @@ test.describe('Frontend', () => {
   })
 
   test('can view and sort via shop page', async ({ page }) => {
+    await expectStorefrontSortProbesToExist()
     await page.goto(`${baseURL}/shop?q=${encodeURIComponent(sortQuery)}`)
 
     const productLinks = page.locator('article.product-shop-card > a.product-shop-card-link')
@@ -790,6 +791,55 @@ test.describe('Frontend', () => {
     trackedOrderIDs.add(orderID)
 
     return orderID
+  }
+
+  async function expectStorefrontSortProbesToExist() {
+    const payload = await getPayload({ config })
+    const products = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'products',
+          draft: false,
+          overrideAccess: false,
+          select: {
+            slug: true,
+            description: true,
+            title: true,
+            _status: true,
+          },
+          where: {
+            and: [
+              {
+                _status: {
+                  equals: 'published',
+                },
+              },
+              {
+                or: [
+                  {
+                    title: {
+                      like: sortQuery,
+                    },
+                  },
+                  {
+                    description: {
+                      like: sortQuery,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      'frontend.sortProbes.storefrontQuery',
+    )
+
+    const slugs = products.docs.map((product) => product.slug).filter(Boolean)
+
+    expect(
+      slugs,
+      `storefront source missing sort probes for query=${sortQuery}: ${JSON.stringify(products.docs)}`,
+    ).toEqual(expect.arrayContaining(['sort-probe-high', 'sort-probe-low']))
   }
 
   async function updateProductInventory(productSlug: string, inventory: number) {
