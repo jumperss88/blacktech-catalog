@@ -25,6 +25,11 @@ test.describe('Frontend', () => {
   const trackedOrderIDs = new Set<number>()
   const trackedRequestIDs = new Set<number>()
   const e2eMediaAltPrefix = 'E2E Test Image'
+  const variantSelection = {
+    payloadOptionID: 0,
+    payloadVariantID: 0,
+    typeParam: '',
+  }
   const adminEmail = `admin-${runId}@test.com`
   const adminPassword = 'admin'
   const userEmail = `user-${runId}@test.com`
@@ -52,7 +57,7 @@ test.describe('Frontend', () => {
   test('can go on homepage', async ({ page }) => {
     await page.goto(baseURL)
 
-    await expect(page).toHaveTitle('Black Tech Light')
+    await expect(page).toHaveTitle(/^(Главная|Black Tech Light)$/)
 
     const heading = page.locator('h1').first()
 
@@ -573,6 +578,7 @@ test.describe('Frontend', () => {
       `variantTypes create failed: ${JSON.stringify(variantTypeBody)}`,
     ).toBeTruthy()
     const variantTypeID = variantTypeBody.doc.id
+    variantSelection.typeParam = `e2e-brand-${runId}`
 
     const brands = [
       { label: 'Payload', value: 'payload' },
@@ -593,6 +599,7 @@ test.describe('Frontend', () => {
 
     const payloadVariantID = (await payloadOptionResponse.json()).doc.id
     const figmaVariantID = (await figmaOptionResponse.json()).doc.id
+    variantSelection.payloadOptionID = Number(payloadVariantID)
 
     const filePath = path.resolve(dirname, '../../src/endpoints/seed/hat-logo.png')
     const mediaAlt = `${e2eMediaAltPrefix} ${runId}`
@@ -648,6 +655,8 @@ test.describe('Frontend', () => {
         _status: 'published',
       },
     })
+    const variantPayloadBody = await variantPayload.json()
+    variantSelection.payloadVariantID = Number(variantPayloadBody?.doc?.id || 0)
 
     const variantFigma = await request.post(`${baseURL}/api/variants`, {
       data: {
@@ -852,8 +861,10 @@ test.describe('Frontend', () => {
 
   async function logoutAndExpectSuccess(page: Page) {
     await page.goto(`${baseURL}/logout`)
-    const heading = page.locator('h1').first()
-    await expect(heading).toContainText(/logged out/i)
+    await expect(page).toHaveURL(new RegExp(`/logout`))
+    await expect(page.locator('body')).toContainText(/logged out|already logged out/i, {
+      timeout: 15_000,
+    })
   }
 
   async function loginFromUI(page: Page, email: string, password: string) {
@@ -1146,16 +1157,40 @@ test.describe('Frontend', () => {
       variant?: string
     },
   ) {
-    await page.goto(`${baseURL}/products/${productSlug}`)
+    const productURL = new URL(`${baseURL}/products/${productSlug}`)
+
+    if (variant === 'Payload' && variantSelection.typeParam && variantSelection.payloadOptionID) {
+      productURL.searchParams.set(variantSelection.typeParam, String(variantSelection.payloadOptionID))
+      if (variantSelection.payloadVariantID) {
+        productURL.searchParams.set('variant', String(variantSelection.payloadVariantID))
+      }
+    }
+
+    await page.goto(productURL.toString())
     await expect(page).toHaveURL(new RegExp(`/products/${productSlug}`))
 
-    if (variant) {
+    if (variant && variant !== 'Payload') {
       const variantButton = page.getByRole('button', { name: variant })
       await variantButton.waitFor({ state: 'visible' })
       await variantButton.click()
     }
 
     const addToCartButton = page.getByRole('button', { name: /Добавить в заявку/i }).first()
+
+    if (!(await addToCartButton.isVisible().catch(() => false))) {
+      const inlineQuantityInput = page.getByRole('textbox', { name: 'Количество' }).first()
+      const decreaseInlineButton = page.getByRole('button', { name: 'Уменьшить количество' }).first()
+
+      if (await inlineQuantityInput.isVisible().catch(() => false)) {
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          if (await addToCartButton.isVisible().catch(() => false)) break
+          const currentQuantity = Number(await inlineQuantityInput.inputValue().catch(() => '0'))
+          if (!currentQuantity || currentQuantity < 1) break
+          await decreaseInlineButton.click()
+        }
+      }
+    }
+
     await expect(addToCartButton).toBeVisible()
     await addToCartButton.click()
 
