@@ -24,6 +24,7 @@ test.describe('Frontend', () => {
   const trackedProductSlugs = new Set<string>(defaultE2EProductSlugs)
   const trackedUserEmails = new Set<string>()
   const trackedOrderIDs = new Set<number>()
+  const trackedRequestIDs = new Set<number>()
   const e2eMediaAltPrefix = 'E2E Test Image'
   const adminEmail = `admin-${runId}@test.com`
   const adminPassword = 'admin'
@@ -36,6 +37,7 @@ test.describe('Frontend', () => {
     postcode: 'WS11 1DB',
   }
   test.beforeAll(async ({ browser, request }, testInfo) => {
+    test.setTimeout(120_000)
     const context = await browser.newContext()
     page = await context.newPage()
     trackedUserEmails.add(adminEmail)
@@ -414,35 +416,51 @@ test.describe('Frontend', () => {
     await expect(addToCartButton).toBeDisabled()
   })
 
-  // This test fails, it should not let you checkout but it does
-  test.skip('should fail checkout when inventory is 0', async ({ page }) => {
-    await loginFromUI(page, adminEmail, adminPassword)
+  test('should fail checkout when inventory is 0', async ({ page }) => {
+    await updateProductInventory('no-inventory-product', 1)
 
-    // update inventory to 1
-    await page.goto(`${baseURL}/admin/collections/products`)
-    const testProductLink = page.getByRole('link', { name: 'No Inventory Product', exact: true })
-    await testProductLink.click()
-    const productDetailsButton = page.getByRole('button', { name: 'Product Details' })
-    await productDetailsButton.click()
-    const inventoryInput = page.locator('input[name="inventory"]')
-    await inventoryInput.fill('1')
-    await saveAndConfirmSuccess(page)
+    await addToCartAndConfirm(page, {
+      productName: 'No Inventory Product',
+      productSlug: 'no-inventory-product',
+    })
 
-    await page.goto(`${baseURL}/products/no-inventory-product`)
-    const addToCartButton = page.getByRole('button', { name: /Добавить в заявку/i }).first()
-    await expect(addToCartButton).toBeVisible()
-    await addToCartButton.click()
+    await updateProductInventory('no-inventory-product', 0)
 
-    // update inventory to 0
-    await page.goto(`${baseURL}/admin/collections/products`)
-    await testProductLink.click()
-    await productDetailsButton.click()
-    await inventoryInput.fill('')
-    await saveAndConfirmSuccess(page)
+    await page.goto(`${baseURL}/checkout`)
+    await expect(page.getByRole('heading', { name: 'Контактные данные' })).toBeVisible()
 
-    await checkout(page, testPaymentDetails)
-    const errorMessage = page.locator('text=This product is out of stock')
-    await expect(errorMessage).toBeVisible()
+    const emailInput = page.locator('input[name="email"]')
+    await emailInput.fill(`inventory-check-${runId}@test.com`)
+
+    const submitRequestPromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' && response.url().includes('/api/requests/submit'),
+      { timeout: 30_000 },
+    )
+
+    await page.getByRole('button', { name: 'Отправить заявку' }).click()
+
+    const submitResponse = await submitRequestPromise
+    const submitBody = await submitResponse.json().catch(() => null)
+    const createdRequestID =
+      submitBody && typeof submitBody === 'object' && 'requestId' in submitBody
+        ? Number(submitBody.requestId)
+        : null
+
+    if (typeof createdRequestID === 'number' && Number.isFinite(createdRequestID)) {
+      trackedRequestIDs.add(createdRequestID)
+    }
+
+    expect(
+      submitResponse.ok(),
+      `Expected request submission to be rejected for out-of-stock item, got status=${submitResponse.status()} body=${JSON.stringify(submitBody)}`,
+    ).toBeFalsy()
+    expect(submitResponse.status()).toBe(409)
+    expect(submitBody).toMatchObject({
+      code: 'ITEM_UNAVAILABLE',
+    })
+    expect(String(submitBody?.error ?? '')).toContain('больше недоступен')
+    expect(createdRequestID).toBeNull()
   })
 
   async function createUserAndLogin(
@@ -786,6 +804,39 @@ test.describe('Frontend', () => {
     return orderID
   }
 
+  async function updateProductInventory(productSlug: string, inventory: number) {
+    const payload = await getPayload({ config })
+
+    const productResult = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'products',
+          where: {
+            slug: {
+              equals: productSlug,
+            },
+          },
+          limit: 1,
+        }),
+      `frontend.updateProductInventory.findProduct:${productSlug}`,
+    )
+
+    const product = productResult.docs?.[0]
+    expect(product?.id, `updateProductInventory missing product: ${productSlug}`).toBeTruthy()
+
+    await withSqliteBusyRetry(
+      () =>
+        payload.update({
+          collection: 'products',
+          id: product!.id,
+          data: {
+            inventory,
+          },
+        }),
+      `frontend.updateProductInventory.updateProduct:${productSlug}:${inventory}`,
+    )
+  }
+
   async function createTransactionForTest({
     customerID,
     customerEmail,
@@ -883,6 +934,27 @@ test.describe('Frontend', () => {
     )
 
     const productIDs = productDocs.docs.map((doc) => doc.id).filter(Boolean)
+
+    if (productIDs.length > 0) {
+      const requestDocsByProduct = await withSqliteBusyRetry(
+        () =>
+          payload.find({
+            collection: 'requests',
+            limit: 500,
+            where: {
+              'items.product': { in: productIDs },
+            },
+          }),
+        'frontend.cleanupE2EData.findRequestsByProduct',
+      )
+
+      for (const requestDoc of requestDocsByProduct.docs) {
+        await withSqliteBusyRetry(
+          () => payload.delete({ collection: 'requests', id: requestDoc.id }),
+          `frontend.cleanupE2EData.deleteRequestByProduct:${requestDoc.id}`,
+        )
+      }
+    }
 
     const variantDocs = await withSqliteBusyRetry(
       () =>
@@ -1012,6 +1084,28 @@ test.describe('Frontend', () => {
         await withSqliteBusyRetry(
           () => payload.delete({ collection: 'orders', id: orderDoc.id }),
           `frontend.cleanupE2EData.deleteOrder:${orderDoc.id}`,
+        )
+      }
+    }
+
+    if (trackedRequestIDs.size > 0) {
+      const requestIDs = Array.from(trackedRequestIDs)
+      const requestDocs = await withSqliteBusyRetry(
+        () =>
+          payload.find({
+            collection: 'requests',
+            limit: 200,
+            where: {
+              id: { in: requestIDs },
+            },
+          }),
+        'frontend.cleanupE2EData.findRequests',
+      )
+
+      for (const requestDoc of requestDocs.docs) {
+        await withSqliteBusyRetry(
+          () => payload.delete({ collection: 'requests', id: requestDoc.id }),
+          `frontend.cleanupE2EData.deleteRequest:${requestDoc.id}`,
         )
       }
     }
