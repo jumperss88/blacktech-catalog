@@ -127,6 +127,7 @@ test.describe('Frontend', () => {
 
   test('can view and sort via shop page', async ({ page }) => {
     await expectStorefrontSortProbesToExist()
+    await expectShopPageToRenderSortProbes(page)
     await page.goto(`${baseURL}/shop?q=${encodeURIComponent(sortQuery)}`)
 
     const productLinks = page.locator('article.product-shop-card > a.product-shop-card-link')
@@ -840,6 +841,21 @@ test.describe('Frontend', () => {
       slugs,
       `storefront source missing sort probes for query=${sortQuery}: ${JSON.stringify(products.docs)}`,
     ).toEqual(expect.arrayContaining(['sort-probe-high', 'sort-probe-low']))
+  }
+
+  async function expectShopPageToRenderSortProbes(page: Page) {
+    const response = await page.request.get(`${baseURL}/shop?q=${encodeURIComponent(sortQuery)}`)
+    const html = await response.text()
+
+    expect(response.ok(), `shop response failed: status=${response.status()}`).toBeTruthy()
+    expect(
+      html,
+      `shop html missing sort probes for query=${sortQuery}`,
+    ).toContain('/products/sort-probe-high')
+    expect(
+      html,
+      `shop html missing sort probes for query=${sortQuery}`,
+    ).toContain('/products/sort-probe-low')
   }
 
   async function updateProductInventory(productSlug: string, inventory: number) {
