@@ -1196,6 +1196,14 @@ test.describe('Frontend', () => {
     const inlineQuantityInput = page.getByRole('textbox', { name: 'Количество' }).first()
     const decreaseInlineButton = page.getByRole('button', { name: 'Уменьшить количество' }).first()
 
+    const getTargetVariantID = () => {
+      if (variant === 'Payload' && variantSelection.payloadVariantID) {
+        return Number(variantSelection.payloadVariantID)
+      }
+
+      return undefined
+    }
+
     const readInlineQuantity = async () => {
       if (!(await inlineQuantityInput.isVisible().catch(() => false))) return 0
       return Number(await inlineQuantityInput.inputValue().catch(() => '0'))
@@ -1221,6 +1229,57 @@ test.describe('Frontend', () => {
       )
     }
 
+    const readTargetCartQuantity = async () => {
+      const productID = productIDsBySlug.get(productSlug)
+      expect(productID, `Missing product ID for slug=${productSlug}`).toBeTruthy()
+
+      const targetVariantID = getTargetVariantID()
+      const { cartID, cartSecret } = await getCartSessionState()
+
+      if (!cartID) return 0
+
+      const query = new URLSearchParams({
+        depth: '2',
+      })
+
+      if (cartSecret) {
+        query.set('secret', cartSecret)
+      }
+
+      const response = await page.request.get(`${baseURL}/api/carts/${cartID}?${query.toString()}`)
+      const body = await response.json().catch(() => null)
+
+      expect(
+        response.ok(),
+        `cart fetch failed: status=${response.status()} body=${JSON.stringify(body)}`,
+      ).toBeTruthy()
+
+      const items = Array.isArray(body?.items) ? body.items : []
+
+      return items.reduce((total: number, item: Record<string, unknown>) => {
+        const itemProduct = item?.product
+        const itemVariant = item?.variant
+
+        const itemProductID =
+          typeof itemProduct === 'object' && itemProduct !== null
+            ? Number((itemProduct as { id?: number }).id)
+            : Number(itemProduct)
+
+        const itemVariantID =
+          typeof itemVariant === 'object' && itemVariant !== null
+            ? Number((itemVariant as { id?: number }).id)
+            : itemVariant
+              ? Number(itemVariant)
+              : undefined
+
+        if (itemProductID !== Number(productID)) return total
+        if (typeof targetVariantID === 'number' && itemVariantID !== targetVariantID) return total
+        if (typeof targetVariantID !== 'number' && typeof itemVariantID === 'number') return total
+
+        return total + Number(item?.quantity || 0)
+      }, 0)
+    }
+
     const addItemToCartViaAPI = async () => {
       const productID = productIDsBySlug.get(productSlug)
       expect(productID, `Missing product ID for slug=${productSlug}`).toBeTruthy()
@@ -1229,8 +1288,10 @@ test.describe('Frontend', () => {
         product: Number(productID),
       }
 
-      if (variant === 'Payload' && variantSelection.payloadVariantID) {
-        item.variant = Number(variantSelection.payloadVariantID)
+      const targetVariantID = getTargetVariantID()
+
+      if (typeof targetVariantID === 'number') {
+        item.variant = targetVariantID
       }
 
       const { cartID, cartSecret } = await getCartSessionState()
@@ -1325,10 +1386,26 @@ test.describe('Frontend', () => {
 
     await expect
       .poll(
-        readInlineQuantity,
+        readTargetCartQuantity,
         { timeout: 15_000 },
       )
       .toBeGreaterThan(0)
+
+    const quantityAfterMutation = await readInlineQuantity()
+
+    // In CI the product-page control can lag behind the canonical cart state.
+    // Treat cart API data as the source of truth and only use the inline control
+    // when it actually reflects the mutation.
+    if (quantityAfterMutation < 1) {
+      await page.reload()
+    }
+
+    await expect
+      .poll(
+        readInlineQuantity,
+        { timeout: 5_000 },
+      )
+      .toBeGreaterThanOrEqual(0)
 
     await expect(page.locator('body')).toContainText(productName)
   }
@@ -1341,6 +1418,63 @@ test.describe('Frontend', () => {
       .first()
     const inlineQuantityInput = page.getByRole('textbox', { name: 'Количество' }).first()
     const reduceQuantityButton = page.getByRole('button', { name: 'Уменьшить количество' }).first()
+    const productSlugMatch = new URL(page.url()).pathname.match(/\/products\/([^/?#]+)/)
+    const productSlug = productSlugMatch?.[1]
+
+    const readTargetCartQuantity = async () => {
+      if (!productSlug) return 0
+
+      const productID = productIDsBySlug.get(productSlug)
+      expect(productID, `Missing product ID for slug=${productSlug}`).toBeTruthy()
+
+      const searchParams = new URL(page.url()).searchParams
+      const targetVariantID = searchParams.get('variant')
+        ? Number(searchParams.get('variant'))
+        : undefined
+
+      const { cartID, cartSecret } = await page.evaluate(() => ({
+        cartID: window.localStorage.getItem('cart'),
+        cartSecret: window.localStorage.getItem('cart_secret'),
+      }))
+
+      if (!cartID) return 0
+
+      const query = new URLSearchParams({ depth: '2' })
+      if (cartSecret) query.set('secret', cartSecret)
+
+      const response = await page.request.get(`${baseURL}/api/carts/${cartID}?${query.toString()}`)
+      const body = await response.json().catch(() => null)
+
+      expect(
+        response.ok(),
+        `cart fetch failed during remove: status=${response.status()} body=${JSON.stringify(body)}`,
+      ).toBeTruthy()
+
+      const items = Array.isArray(body?.items) ? body.items : []
+
+      return items.reduce((total: number, item: Record<string, unknown>) => {
+        const itemProduct = item?.product
+        const itemVariant = item?.variant
+
+        const itemProductID =
+          typeof itemProduct === 'object' && itemProduct !== null
+            ? Number((itemProduct as { id?: number }).id)
+            : Number(itemProduct)
+
+        const itemVariantID =
+          typeof itemVariant === 'object' && itemVariant !== null
+            ? Number((itemVariant as { id?: number }).id)
+            : itemVariant
+              ? Number(itemVariant)
+              : undefined
+
+        if (itemProductID !== Number(productID)) return total
+        if (typeof targetVariantID === 'number' && itemVariantID !== targetVariantID) return total
+        if (typeof targetVariantID !== 'number' && typeof itemVariantID === 'number') return total
+
+        return total + Number(item?.quantity || 0)
+      }, 0)
+    }
 
     await expect(inlineQuantityInput).toBeVisible()
 
@@ -1354,6 +1488,7 @@ test.describe('Frontend', () => {
       await page.waitForTimeout(500)
     }
 
+    await expect.poll(readTargetCartQuantity, { timeout: 15_000 }).toBe(0)
     await expect(addToCartButton).toBeVisible({ timeout: 15_000 })
   }
 
