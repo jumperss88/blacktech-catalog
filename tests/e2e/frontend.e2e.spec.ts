@@ -126,7 +126,7 @@ test.describe('Frontend', () => {
   })
 
   test('can view and sort via shop page', async ({ page }) => {
-    await page.goto(`${baseURL}/shop`)
+    await page.goto(`${baseURL}/shop?q=${encodeURIComponent(sortQuery)}`)
 
     const productLinks = page.locator('article.product-shop-card > a.product-shop-card-link')
     await expect(page.locator('article.product-shop-card > a.product-shop-card-link[href="/products/sort-probe-high"]')).toHaveCount(1)
@@ -143,7 +143,7 @@ test.describe('Frontend', () => {
 
     const priceSort = page.getByRole('link', { name: 'Цена: по возрастанию', exact: true })
     await priceSort.click()
-    await expect(page).toHaveURL(new RegExp(`/shop\\?sort=priceInUSD`))
+    await expect(page).toHaveURL(new RegExp(`/shop\\?q=${sortQuery}&sort=priceInUSD`))
 
     const linksAfterSort = await productLinks.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute('href') || ''),
