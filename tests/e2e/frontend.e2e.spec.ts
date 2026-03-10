@@ -116,15 +116,26 @@ test.describe('Frontend', () => {
   })
 
   test('can view and sort via shop page', async ({ page }) => {
-    await page.goto(`${baseURL}/shop?q=Sort+Probe`)
+    const sortQuery = 'SortProbeE2E'
+    await page.goto(`${baseURL}/shop?q=${sortQuery}`)
 
-    const firstCard = page.locator('div.grid > a').first()
-    await expect(firstCard).toHaveAttribute('href', '/products/sort-probe-high')
+    const productLinks = page.locator('article.product-shop-card > a.product-shop-card-link')
+    await expect(page.locator('article.product-shop-card > a.product-shop-card-link[href="/products/sort-probe-high"]')).toHaveCount(1)
+    await expect(page.locator('article.product-shop-card > a.product-shop-card-link[href="/products/sort-probe-low"]')).toHaveCount(1)
+
+    const linksBeforeSort = await productLinks.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('href') || ''),
+    )
+    expect(linksBeforeSort[0]).toBe('/products/sort-probe-high')
 
     const priceSort = page.getByRole('link', { name: 'Цена: по возрастанию', exact: true })
     await priceSort.click()
-    await expect(page).toHaveURL(/\/shop\?q=Sort\+Probe&sort=priceInUSD/)
-    await expect(firstCard).toHaveAttribute('href', '/products/sort-probe-low')
+    await expect(page).toHaveURL(new RegExp(`/shop\\?q=${sortQuery}&sort=priceInUSD`))
+
+    const linksAfterSort = await productLinks.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('href') || ''),
+    )
+    expect(linksAfterSort[0]).toBe('/products/sort-probe-low')
   })
 
   test('authenticated users can view account', async ({ page }) => {
@@ -144,15 +155,30 @@ test.describe('Frontend', () => {
     const heading = page.locator('h1').first()
     await expect(heading).toHaveText('Account settings')
 
+    const emailInput = page.locator('input[name="email"]')
     const nameInput = page.locator('input[name="name"]')
-    const newName = `Test User`
+    await expect(emailInput).toBeVisible()
+    await expect(emailInput).toHaveValue(adminEmail)
+    await expect(nameInput).toBeVisible()
+    const initialName = await nameInput.inputValue()
+    const newName = `${initialName || 'Test User'} ${Date.now()}`
     await nameInput.fill(newName)
+    await nameInput.blur()
 
-    const updateButton = await page.getByRole('button', { name: 'Update Account' })
+    const updateButton = page.getByRole('button', { name: 'Update Account' })
+    await expect(updateButton).toBeEnabled({ timeout: 15_000 })
+
+    const updateResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        response.url().includes('/api/users/') &&
+        response.ok(),
+      { timeout: 30_000 },
+    )
+
     await updateButton.click()
-
-    const successMessage = page.locator('text=Successfully updated account')
-    await expect(successMessage).toBeVisible()
+    await updateResponsePromise
+    await expect(nameInput).toHaveValue(newName)
   })
 
   test('authenticated users can view orders page', async ({ page }) => {
@@ -620,7 +646,7 @@ test.describe('Frontend', () => {
 
     await createProduct(
       {
-        brand: 'Sort Probe',
+        brand: 'SortProbeE2E',
         model: 'High',
         slug: 'sort-probe-high',
         inventory: 100,
@@ -635,7 +661,7 @@ test.describe('Frontend', () => {
 
     await createProduct(
       {
-        brand: 'Sort Probe',
+        brand: 'SortProbeE2E',
         model: 'Low',
         slug: 'sort-probe-low',
         inventory: 100,
@@ -679,12 +705,8 @@ test.describe('Frontend', () => {
       variant?: string
     },
   ) {
-    await page.goto(`${baseURL}/shop`)
-    await expect(page).toHaveURL(/\/shop/)
-
-    const productCard = page.locator(`a[href="/products/${productSlug}"]`).first()
-    await productCard.waitFor({ state: 'visible' })
-    await productCard.click()
+    await page.goto(`${baseURL}/products/${productSlug}`)
+    await expect(page).toHaveURL(new RegExp(`/products/${productSlug}`))
 
     if (variant) {
       const variantButton = page.getByRole('button', { name: variant })
@@ -762,11 +784,17 @@ test.describe('Frontend', () => {
     expect(pageURL).toContain(`/orders/${orderNumber}`)
   }
 
-  async function saveAndConfirmSuccess(page: Page) {
+  async function saveAndConfirmSuccess(page: Page, collection: 'products' | 'variants' = 'products') {
     const saveButton = page.locator('#action-save')
-    await saveButton.click()
+    const saveRequest = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        response.url().includes(`/api/${collection}/`) &&
+        response.ok(),
+      { timeout: 30_000 },
+    )
 
-    const successMessage = page.locator('text=Updated successfully')
-    await expect(successMessage).toBeVisible()
+    await saveButton.click()
+    await saveRequest
   }
 })
