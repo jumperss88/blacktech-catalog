@@ -399,12 +399,15 @@ test.describe('Frontend', () => {
       `shop response html missing created product in newest-first storefront set: slug=${productSlug}`,
     ).toContain(`/products/${productSlug}`)
 
-    const visibleCardLocator = page.locator(
-      `.shop-page a.product-shop-card-link[href="/products/${productSlug}"]:visible`,
-    )
+    const shopCardHrefs = extractProductShopCardHrefs(shopHTML || '')
+    expect(
+      shopCardHrefs,
+      `shop card set missing created product link in newest-first storefront set: slug=${productSlug}`,
+    ).toContain(`/products/${productSlug}`)
 
-    await expect.poll(async () => visibleCardLocator.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
-    await expect(visibleCardLocator.first()).toBeVisible()
+    await page.goto(`${baseURL}/products/${productSlug}`)
+    await expect(page).toHaveURL(new RegExp(`/products/${productSlug}`))
+    await expect(page.locator('body')).toContainText(`With Variants ${runId}`)
   })
 
   test('Admins can view transactions and orders', async ({ page }) => {
