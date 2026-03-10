@@ -1,3 +1,4 @@
+import { readFile } from 'fs/promises'
 import path from 'path'
 import { test, expect, Page } from '@playwright/test'
 import { getPayload } from 'payload'
@@ -10,9 +11,7 @@ const dirname = path.dirname(filename)
 
 test.describe('Frontend', () => {
   test.describe.configure({ timeout: 120_000 })
-  let page: Page
   const baseURL = 'http://localhost:3000'
-  const mediaURL = `${baseURL}/admin/collections/media`
   const runId = Date.now()
   const defaultE2EProductSlugs = [
     'test-product-variants',
@@ -36,21 +35,18 @@ test.describe('Frontend', () => {
     cvc: '737',
     postcode: 'WS11 1DB',
   }
-  test.beforeAll(async ({ browser, request }, testInfo) => {
+  test.beforeAll(async ({ request }) => {
     test.setTimeout(120_000)
-    const context = await browser.newContext()
-    page = await context.newPage()
     trackedUserEmails.add(adminEmail)
     trackedUserEmails.add(userEmail)
     await cleanupE2EData()
     await ensureAdminUser(adminEmail, adminPassword)
     await createUserAndLogin(request, adminEmail, adminPassword)
-    await createVariantsAndProducts(page, request)
+    await createVariantsAndProducts(request)
   })
 
   test.afterAll(async () => {
     await cleanupE2EData()
-    await page?.close().catch(() => undefined)
   })
 
   test('can go on homepage', async ({ page }) => {
@@ -533,7 +529,7 @@ test.describe('Frontend', () => {
     )
   }
 
-  async function createVariantsAndProducts(page: Page, request: any) {
+  async function createVariantsAndProducts(request: any) {
     const parseResponseBody = async (response: any) => {
       const raw = await response.text()
 
@@ -598,49 +594,30 @@ test.describe('Frontend', () => {
     const payloadVariantID = (await payloadOptionResponse.json()).doc.id
     const figmaVariantID = (await figmaOptionResponse.json()).doc.id
 
-    await loginFromUI(page, adminEmail, adminPassword)
-    await page.goto(`${mediaURL}/create`)
-    const fileInput = page.locator('input[type="file"]')
-    const altInput = page.locator('input[name="alt"]')
     const filePath = path.resolve(dirname, '../../src/endpoints/seed/hat-logo.png')
     const mediaAlt = `${e2eMediaAltPrefix} ${runId}`
-    await fileInput.setInputFiles(filePath)
-    await altInput.fill(mediaAlt)
-    const uploadButton = page.locator('#action-save')
-
-    const createMediaResponsePromise = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' &&
-        response.url().includes('/api/media') &&
-        response.status() >= 200 &&
-        response.status() < 300,
-      { timeout: 30_000 },
-    )
-
-    await uploadButton.click()
-    const createMediaResponse = await createMediaResponsePromise
+    const mediaBuffer = await readFile(filePath)
+    const createMediaResponse = await request.post(`${baseURL}/api/media`, {
+      multipart: {
+        alt: mediaAlt,
+        file: {
+          name: `e2e-hat-logo-${runId}.png`,
+          mimeType: 'image/png',
+          buffer: mediaBuffer,
+        },
+      },
+    })
     const createMediaBody = await parseResponseBody(createMediaResponse)
+    const imageID = createMediaBody?.doc?.id
 
-    let imageID = createMediaBody?.doc?.id
-
-    if (!imageID) {
-      const imageMatch = page.url().match(/\/admin\/collections\/media\/(\d+)/)
-      if (imageMatch?.[1]) {
-        imageID = Number(imageMatch[1])
-      }
-    }
-
-    if (!imageID) {
-      const mediaLookupResponse = await request.get(
-        `${baseURL}/api/media?where[alt][equals]=${encodeURIComponent(mediaAlt)}&limit=1&sort=-createdAt`,
-      )
-      const mediaLookupBody = await parseResponseBody(mediaLookupResponse)
-      imageID = mediaLookupBody?.docs?.[0]?.id
-    }
+    expect(
+      createMediaResponse.ok(),
+      `media bootstrap failed: status=${createMediaResponse.status()} body=${JSON.stringify(createMediaBody)}`,
+    ).toBeTruthy()
 
     expect(
       imageID,
-      `media bootstrap failed: createBody=${JSON.stringify(createMediaBody)} currentURL=${page.url()}`,
+      `media bootstrap invalid response: filePath=${filePath} alt=${mediaAlt} body=${JSON.stringify(createMediaBody)}`,
     ).toBeTruthy()
 
     const productID = await createProduct(
