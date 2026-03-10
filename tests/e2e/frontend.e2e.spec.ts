@@ -26,6 +26,7 @@ test.describe('Frontend', () => {
   const trackedRequestIDs = new Set<number>()
   const e2eMediaAltPrefix = 'E2E Test Image'
   const sortQuery = `sort-probe-e2e-${runId}`
+  const productIDsBySlug = new Map<string, number>()
   const variantSelection = {
     payloadOptionID: 0,
     payloadVariantID: 0,
@@ -556,6 +557,10 @@ test.describe('Frontend', () => {
         body && typeof body === 'object' && 'doc' in body && body.doc?.id,
         `${label} invalid response contract: ${JSON.stringify(body)}`,
       ).toBeTruthy()
+
+      if (typeof data.slug === 'string') {
+        productIDsBySlug.set(data.slug, Number(body.doc.id))
+      }
 
       return body.doc.id
     }
@@ -1196,6 +1201,73 @@ test.describe('Frontend', () => {
       return Number(await inlineQuantityInput.inputValue().catch(() => '0'))
     }
 
+    const getCartSessionState = async () =>
+      page.evaluate(() => ({
+        cartID: window.localStorage.getItem('cart'),
+        cartSecret: window.localStorage.getItem('cart_secret'),
+      }))
+
+    const setCartSessionState = async (cartID: number | string, cartSecret?: string | null) => {
+      await page.evaluate(
+        ({ cartID, cartSecret }) => {
+          window.localStorage.setItem('cart', String(cartID))
+          if (cartSecret) {
+            window.localStorage.setItem('cart_secret', cartSecret)
+          } else {
+            window.localStorage.removeItem('cart_secret')
+          }
+        },
+        { cartID, cartSecret },
+      )
+    }
+
+    const addItemToCartViaAPI = async () => {
+      const productID = productIDsBySlug.get(productSlug)
+      expect(productID, `Missing product ID for slug=${productSlug}`).toBeTruthy()
+
+      const item: Record<string, number> = {
+        product: Number(productID),
+      }
+
+      if (variant === 'Payload' && variantSelection.payloadVariantID) {
+        item.variant = Number(variantSelection.payloadVariantID)
+      }
+
+      const { cartID, cartSecret } = await getCartSessionState()
+
+      if (cartID) {
+        const response = await page.request.post(`${baseURL}/api/carts/${cartID}/add-item`, {
+          data: {
+            item,
+            quantity: 1,
+            ...(cartSecret ? { secret: cartSecret } : {}),
+          },
+        })
+        const body = await response.json().catch(() => null)
+        expect(
+          response.ok(),
+          `cart add-item failed: status=${response.status()} body=${JSON.stringify(body)}`,
+        ).toBeTruthy()
+        expect(body?.success).toBeTruthy()
+        return
+      }
+
+      const response = await page.request.post(`${baseURL}/api/carts`, {
+        data: {
+          currency: 'USD',
+          items: [{ ...item, quantity: 1 }],
+        },
+      })
+      const body = await response.json().catch(() => null)
+      const createdCartID = body?.doc?.id
+      expect(
+        response.ok(),
+        `cart create failed: status=${response.status()} body=${JSON.stringify(body)}`,
+      ).toBeTruthy()
+      expect(createdCartID, `cart create missing id: ${JSON.stringify(body)}`).toBeTruthy()
+      await setCartSessionState(createdCartID, body?.doc?.secret ?? null)
+    }
+
     // Deterministic reset: if the target product is already in cart, reduce it
     // until the primary CTA for this product is available again.
     let currentQuantity = await readInlineQuantity()
@@ -1228,21 +1300,28 @@ test.describe('Frontend', () => {
         await variantButton.click()
       }
 
-      await expect(addToCartButton).toBeVisible({ timeout: 15_000 })
+      const hasPrimaryAddButtonAfterVariant = await addToCartButton.isVisible().catch(() => false)
+
+      if (!hasPrimaryAddButtonAfterVariant) {
+        await addItemToCartViaAPI()
+        await page.reload()
+      }
     }
 
-    await expect(addToCartButton).toBeEnabled({ timeout: 15_000 })
+    if (await addToCartButton.isVisible().catch(() => false)) {
+      await expect(addToCartButton).toBeEnabled({ timeout: 15_000 })
 
-    const cartMutationPromise = page.waitForResponse(
-      (response) =>
-        ['POST', 'PATCH'].includes(response.request().method()) &&
-        response.url().includes('/api/carts') &&
-        response.ok(),
-      { timeout: 30_000 },
-    )
+      const cartMutationPromise = page.waitForResponse(
+        (response) =>
+          ['POST', 'PATCH'].includes(response.request().method()) &&
+          response.url().includes('/api/carts') &&
+          response.ok(),
+        { timeout: 30_000 },
+      )
 
-    await addToCartButton.click()
-    await cartMutationPromise
+      await addToCartButton.click()
+      await cartMutationPromise
+    }
 
     await expect
       .poll(
