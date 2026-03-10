@@ -357,6 +357,7 @@ test.describe('Frontend', () => {
 
     const productResponse = await page.request.post(`${baseURL}/api/products`, {
       data: {
+        title: productSlug,
         brand: 'New Product',
         model: `With Variants ${runId}`,
         slug: productSlug,
@@ -387,23 +388,23 @@ test.describe('Frontend', () => {
     })
     expect(variantResponse.ok(), `variant create failed: ${variantResponse.status()}`).toBeTruthy()
 
-    await page.goto(`${baseURL}/shop`)
-    const newProductCards = page.locator(`a[href="/products/${productSlug}"]`)
-    const resolveVisibleCardIndex = async () => {
-      const candidates = await newProductCards.count()
-      for (let index = 0; index < candidates; index += 1) {
-        if (await newProductCards.nth(index).isVisible().catch(() => false)) {
-          return index
-        }
-      }
+    await expectStorefrontProductToExist(productSlug)
 
-      return -1
-    }
+    const shopResponse = await page.goto(`${baseURL}/shop?sort=-createdAt`)
+    const shopHTML = await shopResponse?.text()
 
-    await expect.poll(resolveVisibleCardIndex, { timeout: 15_000 }).toBeGreaterThanOrEqual(0)
-    const visibleCardIndex = await resolveVisibleCardIndex()
-    expect(visibleCardIndex).toBeGreaterThanOrEqual(0)
-    await expect(newProductCards.nth(visibleCardIndex)).toBeVisible()
+    expect(shopResponse?.ok(), `shop navigation failed: status=${shopResponse?.status()}`).toBeTruthy()
+    expect(
+      shopHTML,
+      `shop response html missing created product in newest-first storefront set: slug=${productSlug}`,
+    ).toContain(`/products/${productSlug}`)
+
+    const visibleCardLocator = page.locator(
+      `.shop-page a.product-shop-card-link[href="/products/${productSlug}"]:visible`,
+    )
+
+    await expect.poll(async () => visibleCardLocator.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
+    await expect(visibleCardLocator.first()).toBeVisible()
   })
 
   test('Admins can view transactions and orders', async ({ page }) => {
@@ -876,6 +877,42 @@ test.describe('Frontend', () => {
       slugs,
       `storefront source missing sort probes for query=${sortQuery}: ${JSON.stringify(products.docs)}`,
     ).toEqual(expect.arrayContaining(['sort-probe-high', 'sort-probe-low']))
+  }
+
+  async function expectStorefrontProductToExist(slug: string) {
+    const payload = await getPayload({ config })
+
+    const productLookup = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'products',
+          draft: false,
+          depth: 0,
+          limit: 1,
+          where: {
+            and: [
+              {
+                slug: {
+                  equals: slug,
+                },
+              },
+              {
+                _status: {
+                  equals: 'published',
+                },
+              },
+            ],
+          },
+          select: {
+            id: true,
+            slug: true,
+          },
+        }),
+      `frontend.expectStorefrontProductToExist:${slug}`,
+    )
+
+    expect(productLookup.docs.length, `storefront product not found for slug=${slug}`).toBeGreaterThan(0)
+    expect(productLookup.docs[0]?.slug).toBe(slug)
   }
 
   function extractProductShopCardHrefs(html: string) {
