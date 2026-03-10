@@ -6,7 +6,6 @@ import { generateMeta } from '@/utilities/generateMeta'
 import configPromise from '@payload-config'
 import { getPayload } from 'payload'
 import { draftMode } from 'next/headers'
-import { homeStaticData } from '@/endpoints/seed/home-static'
 import React from 'react'
 
 import type { Page } from '@/payload-types'
@@ -53,15 +52,9 @@ export default async function Page({ params }: Args) {
     return notFound()
   }
 
-  let page = await queryPageBySlug({
-    slug,
-  })
+  const page = slug === 'home' ? await queryHomePage() : await queryPageBySlug({ slug })
 
   // Remove this code once your website is seeded
-  if (!page && slug === 'home') {
-    page = homeStaticData() as Page
-  }
-
   if (!page) {
     return notFound()
   }
@@ -71,7 +64,7 @@ export default async function Page({ params }: Args) {
   return (
     <article className="pt-8 pb-16">
       {slug === 'o-nas' || slug === 'servisnii-tsentr' || slug === 'kontakty' ? null : <RenderHero {...hero} />}
-      <RenderBlocks blocks={layout} showHomeB2BSection={slug === 'home'} />
+      <RenderBlocks blocks={layout} />
     </article>
   )
 }
@@ -83,14 +76,30 @@ export async function generateMetadata({ params }: Args): Promise<Metadata> {
     return {}
   }
 
-  const page = await queryPageBySlug({
-    slug,
-  })
+  const page = slug === 'home' ? await queryHomePage() : await queryPageBySlug({ slug })
 
   return generateMeta({ doc: page })
 }
 
 const isAssetLikeSlug = (slug: string) => slug.includes('.')
+
+const hasMeaningfulValue = (value: unknown): boolean => {
+  if (value == null) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0
+  return true
+}
+
+const hasHomeContent = (page: Partial<Page> | null): page is Page => {
+  if (!page) return false
+
+  return (
+    hasMeaningfulValue(page.hero) ||
+    hasMeaningfulValue(page.layout) ||
+    hasMeaningfulValue(page.meta)
+  )
+}
 
 const queryPageBySlug = async ({ slug }: { slug: string }) => {
   const { isEnabled: draft } = await draftMode()
@@ -116,4 +125,33 @@ const queryPageBySlug = async ({ slug }: { slug: string }) => {
   })
 
   return result.docs?.[0] || null
+}
+
+const queryHomePage = async () => {
+  const { isEnabled: draft } = await draftMode()
+  const payload = await getPayload({ config: configPromise })
+
+  const home = await payload.findGlobal({
+    slug: 'home',
+    draft,
+    overrideAccess: false,
+  })
+
+  if (hasHomeContent(home as Partial<Page>)) {
+    return {
+      ...home,
+      slug: 'home',
+    } as Page
+  }
+
+  const legacyHomePage = await queryPageBySlug({ slug: 'home' })
+
+  if (legacyHomePage) {
+    return legacyHomePage
+  }
+
+  return {
+    ...home,
+    slug: 'home',
+  } as Page
 }

@@ -6,6 +6,7 @@ import { Carousel } from '@/blocks/Carousel/config'
 import { ContactsHub } from '@/blocks/ContactsHub/config'
 import { ServiceCenter } from '@/blocks/ServiceCenter/config'
 import { ThreeItemGrid } from '@/blocks/ThreeItemGrid/config'
+import { HomeB2B } from '@/blocks/HomeB2B/config'
 import { generatePreviewPath } from '@/utilities/generatePreviewPath'
 import { adminOnly } from '@/access/adminOnly'
 import { Archive } from '@/blocks/ArchiveBlock/config'
@@ -44,6 +45,11 @@ export const Pages: CollectionConfig = {
   admin: {
     group: 'Контент',
     defaultColumns: ['title', 'slug', 'updatedAt'],
+    baseFilter: () => ({
+      slug: {
+        not_equals: 'home',
+      },
+    }),
     ...(isAdminPreviewEnabled
       ? {
           livePreview: {
@@ -113,6 +119,7 @@ export const Pages: CollectionConfig = {
                 MediaBlock,
                 Archive,
                 Carousel,
+                HomeB2B,
                 ServiceCenter,
                 ThreeItemGrid,
                 Banner,
