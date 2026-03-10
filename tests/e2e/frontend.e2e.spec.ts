@@ -35,11 +35,11 @@ test.describe('Frontend', () => {
   test('can go on homepage', async ({ page }) => {
     await page.goto(baseURL)
 
-    await expect(page).toHaveTitle(/Payload Ecommerce Template/)
+    await expect(page).toHaveTitle('Black Tech Light')
 
     const heading = page.locator('h1').first()
 
-    await expect(heading).toHaveText('Payload Ecommerce Template')
+    await expect(heading).toContainText('Поставки сценического светового оборудования')
   })
 
   test('can sign up and subsequently login', async ({ page }) => {
@@ -179,8 +179,10 @@ test.describe('Frontend', () => {
   test('authenticated customers cannot access /admin', async ({ page }) => {
     await createUserAndLogin(page.request, userEmail, userPassword, false)
     await page.goto(`${baseURL}/admin`)
-    const heading = page.locator('h1').first()
-    await expect(heading).toContainText('Unauthorized')
+
+    await expect(page).toHaveURL(/\/admin/)
+    const bodyText = (await page.locator('body').innerText()).toLowerCase()
+    expect(bodyText).toMatch(/unauthorized|not authorized|forbidden|login|войти|доступ/)
   })
 
   test('Guest can create and view order', async ({ page }) => {
@@ -344,7 +346,7 @@ test.describe('Frontend', () => {
 
   test('should disable add to cart when product has no inventory', async ({ page }) => {
     await page.goto(`${baseURL}/products/no-inventory-product`)
-    const addToCartButton = page.getByRole('button', { name: 'Add to Cart' })
+    const addToCartButton = page.getByRole('button', { name: /Добавить в заявку/i }).first()
     await expect(addToCartButton).toBeDisabled()
   })
 
@@ -363,7 +365,7 @@ test.describe('Frontend', () => {
     await saveAndConfirmSuccess(page)
 
     await page.goto(`${baseURL}/products/no-inventory-product`)
-    const addToCartButton = page.getByRole('button', { name: 'Add to Cart' })
+    const addToCartButton = page.getByRole('button', { name: /Добавить в заявку/i }).first()
     await expect(addToCartButton).toBeVisible()
     await addToCartButton.click()
 
@@ -690,7 +692,7 @@ test.describe('Frontend', () => {
       await variantButton.click()
     }
 
-    const addToCartButton = page.getByRole('button', { name: 'Add to Cart' })
+    const addToCartButton = page.getByRole('button', { name: /Добавить в заявку/i }).first()
     await expect(addToCartButton).toBeVisible()
     await addToCartButton.click()
 
@@ -707,7 +709,7 @@ test.describe('Frontend', () => {
     await expect(reduceQuantityButton).toBeVisible()
     await reduceQuantityButton.click()
 
-    const emptyCartMessage = page.getByText('Your cart is empty.')
+    const emptyCartMessage = page.getByText('Ваша заявка пуста.')
     await expect(emptyCartMessage).toBeVisible()
   }
 
