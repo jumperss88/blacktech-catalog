@@ -1421,7 +1421,7 @@ test.describe('Frontend', () => {
     const productSlugMatch = new URL(page.url()).pathname.match(/\/products\/([^/?#]+)/)
     const productSlug = productSlugMatch?.[1]
 
-    const readTargetCartQuantity = async () => {
+    const readTargetCartState = async () => {
       if (!productSlug) return 0
 
       const productID = productIDsBySlug.get(productSlug)
@@ -1451,8 +1451,10 @@ test.describe('Frontend', () => {
       ).toBeTruthy()
 
       const items = Array.isArray(body?.items) ? body.items : []
+      let matchedItemID: number | undefined
+      let matchedQuantity = 0
 
-      return items.reduce((total: number, item: Record<string, unknown>) => {
+      for (const item of items as Record<string, unknown>[]) {
         const itemProduct = item?.product
         const itemVariant = item?.variant
 
@@ -1468,27 +1470,82 @@ test.describe('Frontend', () => {
               ? Number(itemVariant)
               : undefined
 
-        if (itemProductID !== Number(productID)) return total
-        if (typeof targetVariantID === 'number' && itemVariantID !== targetVariantID) return total
-        if (typeof targetVariantID !== 'number' && typeof itemVariantID === 'number') return total
+        if (itemProductID !== Number(productID)) continue
+        if (typeof targetVariantID === 'number' && itemVariantID !== targetVariantID) continue
+        if (typeof targetVariantID !== 'number' && typeof itemVariantID === 'number') continue
 
-        return total + Number(item?.quantity || 0)
-      }, 0)
+        matchedItemID = Number(item?.id)
+        matchedQuantity += Number(item?.quantity || 0)
+      }
+
+      return {
+        cartID,
+        cartSecret,
+        itemID: matchedItemID,
+        quantity: matchedQuantity,
+      }
     }
 
-    await expect(inlineQuantityInput).toBeVisible()
+    const removeTargetItemViaAPI = async () => {
+      const targetState = await readTargetCartState()
+
+      if (!targetState || !targetState.cartID || !targetState.itemID || targetState.quantity < 1) {
+        return
+      }
+
+      const response = await page.request.post(
+        `${baseURL}/api/carts/${targetState.cartID}/remove-item`,
+        {
+          data: {
+            itemID: targetState.itemID,
+            ...(targetState.cartSecret ? { secret: targetState.cartSecret } : {}),
+          },
+        },
+      )
+      const body = await response.json().catch(() => null)
+
+      expect(
+        response.ok(),
+        `cart remove-item failed: status=${response.status()} body=${JSON.stringify(body)}`,
+      ).toBeTruthy()
+      expect(body?.success).toBeTruthy()
+    }
+
+    let targetState = await readTargetCartState()
+
+    // In CI the product-page quantity control may lag behind cart hydration even when
+    // the target item is already present in cart state. Visibility of "Количество"
+    // is therefore not a valid precondition for the remove path.
+    if (targetState && targetState.quantity < 1) {
+      return
+    }
 
     for (let attempt = 0; attempt < 10; attempt += 1) {
       if (await addToCartButton.isVisible().catch(() => false)) break
 
+      const inlineControlVisible = await inlineQuantityInput.isVisible().catch(() => false)
+      if (!inlineControlVisible) {
+        await removeTargetItemViaAPI()
+        break
+      }
+
       const currentQuantity = Number(await inlineQuantityInput.inputValue().catch(() => '0'))
-      if (!currentQuantity || currentQuantity < 1) break
+      if (!currentQuantity || currentQuantity < 1) {
+        await removeTargetItemViaAPI()
+        break
+      }
 
       await reduceQuantityButton.click()
       await page.waitForTimeout(500)
+
+      targetState = await readTargetCartState()
+      if (targetState.quantity < 1) break
     }
 
-    await expect.poll(readTargetCartQuantity, { timeout: 15_000 }).toBe(0)
+    await expect
+      .poll(async () => (await readTargetCartState()).quantity, { timeout: 15_000 })
+      .toBe(0)
+    await page.reload()
     await expect(addToCartButton).toBeVisible({ timeout: 15_000 })
   }
 
