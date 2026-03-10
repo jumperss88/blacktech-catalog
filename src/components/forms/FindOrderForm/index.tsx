@@ -1,7 +1,3 @@
-import { FormItem } from '@/components/forms/FormItem'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import React, { Fragment } from 'react'
 
 type Props = {
@@ -20,32 +16,43 @@ export const FindOrderForm: React.FC<Props> = ({ initialEmail }) => {
         className="max-w-lg flex flex-col gap-8"
         method="GET"
       >
-        <FormItem>
-          <Label htmlFor="email" className="mb-2">
+        <div className="flex flex-col gap-2">
+          <label
+            className="mb-2 flex items-center gap-2 font-mono text-sm leading-none text-primary/50"
+            htmlFor="email"
+          >
             Email address
-          </Label>
-          <Input
+          </label>
+          <input
+            className="border-input bg-background flex h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base shadow-xs outline-none md:text-sm"
             defaultValue={initialEmail}
             id="email"
             name="email"
             required
             type="email"
           />
-        </FormItem>
-        <FormItem>
-          <Label htmlFor="orderID" className="mb-2">
+        </div>
+        <div className="flex flex-col gap-2">
+          <label
+            className="mb-2 flex items-center gap-2 font-mono text-sm leading-none text-primary/50"
+            htmlFor="orderID"
+          >
             Order ID
-          </Label>
-          <Input
+          </label>
+          <input
+            className="border-input bg-background flex h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base shadow-xs outline-none md:text-sm"
             id="orderID"
             name="orderID"
             required
             type="text"
           />
-        </FormItem>
-        <Button type="submit" className="self-start" variant="default">
+        </div>
+        <button
+          className="bg-primary text-primary-foreground self-start rounded-md px-4 py-2 text-sm font-medium shadow-xs transition-[color,box-shadow]"
+          type="submit"
+        >
           Find my order
-        </Button>
+        </button>
       </form>
     </Fragment>
   )
