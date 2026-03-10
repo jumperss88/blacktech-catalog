@@ -1411,6 +1411,13 @@ test.describe('Frontend', () => {
   }
 
   async function removeFromCartAndConfirm(page: Page) {
+    type TargetCartState = {
+      cartID: string | null
+      cartSecret: string | null
+      itemID?: number
+      quantity: number
+    }
+
     const addToCartButton = page
       .locator('button[aria-label="Добавить в заявку"]', {
         has: page.locator('span', { hasText: 'Добавить в заявку' }),
@@ -1421,8 +1428,14 @@ test.describe('Frontend', () => {
     const productSlugMatch = new URL(page.url()).pathname.match(/\/products\/([^/?#]+)/)
     const productSlug = productSlugMatch?.[1]
 
-    const readTargetCartState = async () => {
-      if (!productSlug) return 0
+    const readTargetCartState = async (): Promise<TargetCartState> => {
+      if (!productSlug) {
+        return {
+          cartID: null,
+          cartSecret: null,
+          quantity: 0,
+        }
+      }
 
       const productID = productIDsBySlug.get(productSlug)
       expect(productID, `Missing product ID for slug=${productSlug}`).toBeTruthy()
@@ -1437,7 +1450,13 @@ test.describe('Frontend', () => {
         cartSecret: window.localStorage.getItem('cart_secret'),
       }))
 
-      if (!cartID) return 0
+      if (!cartID) {
+        return {
+          cartID: null,
+          cartSecret,
+          quantity: 0,
+        }
+      }
 
       const query = new URLSearchParams({ depth: '2' })
       if (cartSecret) query.set('secret', cartSecret)
@@ -1489,7 +1508,7 @@ test.describe('Frontend', () => {
     const removeTargetItemViaAPI = async () => {
       const targetState = await readTargetCartState()
 
-      if (!targetState || !targetState.cartID || !targetState.itemID || targetState.quantity < 1) {
+      if (!targetState.cartID || !targetState.itemID || targetState.quantity < 1) {
         return
       }
 
@@ -1516,7 +1535,7 @@ test.describe('Frontend', () => {
     // In CI the product-page quantity control may lag behind cart hydration even when
     // the target item is already present in cart state. Visibility of "Количество"
     // is therefore not a valid precondition for the remove path.
-    if (targetState && targetState.quantity < 1) {
+    if (targetState.quantity < 1) {
       return
     }
 
