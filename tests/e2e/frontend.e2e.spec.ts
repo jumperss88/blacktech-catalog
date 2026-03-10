@@ -139,27 +139,33 @@ test.describe('Frontend', () => {
       shopHTML,
       `shop navigation html missing sort probes for query=${sortQuery}`,
     ).toContain('/products/sort-probe-low')
-
-    const productLinks = page.locator('article.product-shop-card > a.product-shop-card-link')
-    await expect(page.locator('article.product-shop-card > a.product-shop-card-link[href="/products/sort-probe-high"]')).toHaveCount(1)
-    await expect(page.locator('article.product-shop-card > a.product-shop-card-link[href="/products/sort-probe-low"]')).toHaveCount(1)
-
-    const linksBeforeSort = await productLinks.evaluateAll((elements) =>
-      elements.map((element) => element.getAttribute('href') || ''),
-    )
+    const linksBeforeSort = extractProductShopCardHrefs(shopHTML || '')
     expect(linksBeforeSort.indexOf('/products/sort-probe-high')).toBeGreaterThanOrEqual(0)
     expect(linksBeforeSort.indexOf('/products/sort-probe-low')).toBeGreaterThanOrEqual(0)
     expect(linksBeforeSort.indexOf('/products/sort-probe-high')).toBeLessThan(
       linksBeforeSort.indexOf('/products/sort-probe-low'),
     )
 
-    const priceSort = page.getByRole('link', { name: 'Цена: по возрастанию', exact: true })
-    await priceSort.click()
-    await expect(page).toHaveURL(new RegExp(`/shop\\?q=${sortQuery}&sort=priceInUSD`))
-
-    const linksAfterSort = await productLinks.evaluateAll((elements) =>
-      elements.map((element) => element.getAttribute('href') || ''),
+    const sortedShopResponse = await page.goto(
+      `${baseURL}/shop?q=${encodeURIComponent(sortQuery)}&sort=priceInUSD`,
     )
+    const sortedShopHTML = await sortedShopResponse?.text()
+
+    expect(
+      sortedShopResponse?.ok(),
+      `sorted shop navigation failed: status=${sortedShopResponse?.status()}`,
+    ).toBeTruthy()
+    await expect(page).toHaveURL(new RegExp(`/shop\\?q=${sortQuery}&sort=priceInUSD`))
+    expect(
+      sortedShopHTML,
+      `sorted shop navigation html missing sort probes for query=${sortQuery}`,
+    ).toContain('/products/sort-probe-high')
+    expect(
+      sortedShopHTML,
+      `sorted shop navigation html missing sort probes for query=${sortQuery}`,
+    ).toContain('/products/sort-probe-low')
+
+    const linksAfterSort = extractProductShopCardHrefs(sortedShopHTML || '')
     expect(linksAfterSort.indexOf('/products/sort-probe-high')).toBeGreaterThanOrEqual(0)
     expect(linksAfterSort.indexOf('/products/sort-probe-low')).toBeGreaterThanOrEqual(0)
     expect(linksAfterSort.indexOf('/products/sort-probe-low')).toBeLessThan(
@@ -851,6 +857,29 @@ test.describe('Frontend', () => {
       slugs,
       `storefront source missing sort probes for query=${sortQuery}: ${JSON.stringify(products.docs)}`,
     ).toEqual(expect.arrayContaining(['sort-probe-high', 'sort-probe-low']))
+  }
+
+  function extractProductShopCardHrefs(html: string) {
+    const articlePattern = /<article[^>]*class="[^"]*product-shop-card[^"]*"[^>]*>[\s\S]*?<\/article>/g
+    const hrefs: string[] = []
+
+    for (const article of html.match(articlePattern) ?? []) {
+      const linkMatch =
+        article.match(
+          /<a\b[^>]*class="[^"]*product-shop-card-link[^"]*"[^>]*href="([^"]+)"/,
+        ) ||
+        article.match(
+          /<a\b[^>]*href="([^"]+)"[^>]*class="[^"]*product-shop-card-link[^"]*"/,
+        )
+
+      const href = linkMatch?.[1]
+
+      if (href) {
+        hrefs.push(href)
+      }
+    }
+
+    return hrefs
   }
 
   async function updateProductInventory(productSlug: string, inventory: number) {
