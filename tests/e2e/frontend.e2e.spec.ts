@@ -11,7 +11,7 @@ const dirname = path.dirname(filename)
 
 test.describe('Frontend', () => {
   test.describe.configure({ timeout: 120_000 })
-  const baseURL = 'http://localhost:3000'
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'
   const runId = Date.now()
   const defaultE2EProductSlugs = [
     'test-product-variants',
@@ -275,6 +275,8 @@ test.describe('Frontend', () => {
     await page.goto(`${baseURL}/find-order`)
     const orderNumberInput = page.locator('input[name="orderID"]')
     const emailInput = page.locator('input[name="email"]')
+    await expect(orderNumberInput).toHaveCount(1)
+    await expect(emailInput).toHaveCount(1)
     await orderNumberInput.fill(String(orderID))
     await emailInput.fill(guestEmail)
 

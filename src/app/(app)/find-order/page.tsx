@@ -5,9 +5,23 @@ import React from 'react'
 import { FindOrderForm } from '@/components/forms/FindOrderForm'
 import { getPayload } from 'payload'
 import { headers as getHeaders } from 'next/headers.js'
+import { redirect } from 'next/navigation'
 import configPromise from '@payload-config'
 
-export default async function FindOrderPage() {
+type Props = {
+  searchParams: Promise<{
+    email?: string
+    orderID?: string
+  }>
+}
+
+export default async function FindOrderPage({ searchParams }: Props) {
+  const { email, orderID } = await searchParams
+
+  if (email && orderID) {
+    redirect(`/orders/${encodeURIComponent(orderID)}?email=${encodeURIComponent(email)}`)
+  }
+
   const headers = await getHeaders()
   const payload = await getPayload({ config: configPromise })
   const { user } = await payload.auth({ headers })
