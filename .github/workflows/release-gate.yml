@@ -10,6 +10,7 @@ jobs:
   release-gate:
     runs-on: ubuntu-latest
     env:
+      PAYLOAD_SECRET: ci-release-gate-secret
       PORT: 3000
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
 
