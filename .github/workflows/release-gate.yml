@@ -21,12 +21,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: pnpm
 
       - name: Enable corepack
         run: corepack enable
 
       - name: Install dependencies
-        run: corepack pnpm run ii
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         run: corepack pnpm run test:e2e:install-browsers
