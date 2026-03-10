@@ -388,9 +388,22 @@ test.describe('Frontend', () => {
     expect(variantResponse.ok(), `variant create failed: ${variantResponse.status()}`).toBeTruthy()
 
     await page.goto(`${baseURL}/shop`)
-    const newProductCard = page.locator(`a[href="/products/${productSlug}"]`).first()
-    await newProductCard.waitFor({ state: 'visible' })
-    await expect(newProductCard).toBeVisible()
+    const newProductCards = page.locator(`a[href="/products/${productSlug}"]`)
+    const resolveVisibleCardIndex = async () => {
+      const candidates = await newProductCards.count()
+      for (let index = 0; index < candidates; index += 1) {
+        if (await newProductCards.nth(index).isVisible().catch(() => false)) {
+          return index
+        }
+      }
+
+      return -1
+    }
+
+    await expect.poll(resolveVisibleCardIndex, { timeout: 15_000 }).toBeGreaterThanOrEqual(0)
+    const visibleCardIndex = await resolveVisibleCardIndex()
+    expect(visibleCardIndex).toBeGreaterThanOrEqual(0)
+    await expect(newProductCards.nth(visibleCardIndex)).toBeVisible()
   })
 
   test('Admins can view transactions and orders', async ({ page }) => {
