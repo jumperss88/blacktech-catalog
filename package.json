@@ -25,6 +25,7 @@
     "stripe-webhooks": "stripe listen --forward-to localhost:3000/api/stripe/webhooks",
     "test": "corepack pnpm run test:int && corepack pnpm run test:e2e",
     "test:e2e:install-browsers": "corepack pnpm exec playwright install chromium",
+    "test:e2e:ci": "cross-env PORT=3000 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts --workers=1 --reporter=line",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --max-old-space-size=8000\" corepack pnpm build && cross-env PORT=3000 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts --workers=1",
     "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts"
   },

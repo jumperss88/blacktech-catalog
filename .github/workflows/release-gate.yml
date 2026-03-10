@@ -36,5 +36,18 @@ jobs:
       - name: Install Playwright browsers
         run: corepack pnpm run test:e2e:install-browsers
 
-      - name: Run release gate
-        run: corepack pnpm run check:deploy
+      - name: Check types
+        run: corepack pnpm run check:types
+        timeout-minutes: 5
+
+      - name: Run integration tests
+        run: corepack pnpm run test:int
+        timeout-minutes: 10
+
+      - name: Build app
+        run: corepack pnpm run build
+        timeout-minutes: 15
+
+      - name: Run e2e tests
+        run: corepack pnpm run test:e2e:ci
+        timeout-minutes: 15
