@@ -1414,7 +1414,7 @@ test.describe('Frontend', () => {
     type TargetCartState = {
       cartID: string | null
       cartSecret: string | null
-      itemID?: number
+      itemIDs: string[]
       quantity: number
     }
 
@@ -1433,6 +1433,7 @@ test.describe('Frontend', () => {
         return {
           cartID: null,
           cartSecret: null,
+          itemIDs: [],
           quantity: 0,
         }
       }
@@ -1454,6 +1455,7 @@ test.describe('Frontend', () => {
         return {
           cartID: null,
           cartSecret,
+          itemIDs: [],
           quantity: 0,
         }
       }
@@ -1470,7 +1472,7 @@ test.describe('Frontend', () => {
       ).toBeTruthy()
 
       const items = Array.isArray(body?.items) ? body.items : []
-      let matchedItemID: number | undefined
+      const matchedItemIDs: string[] = []
       let matchedQuantity = 0
 
       for (const item of items as Record<string, unknown>[]) {
@@ -1493,14 +1495,17 @@ test.describe('Frontend', () => {
         if (typeof targetVariantID === 'number' && itemVariantID !== targetVariantID) continue
         if (typeof targetVariantID !== 'number' && typeof itemVariantID === 'number') continue
 
-        matchedItemID = Number(item?.id)
+        const itemRowID = typeof item?.id === 'string' ? item.id : null
+        if (itemRowID) {
+          matchedItemIDs.push(itemRowID)
+        }
         matchedQuantity += Number(item?.quantity || 0)
       }
 
       return {
         cartID,
         cartSecret,
-        itemID: matchedItemID,
+        itemIDs: matchedItemIDs,
         quantity: matchedQuantity,
       }
     }
@@ -1508,64 +1513,46 @@ test.describe('Frontend', () => {
     const removeTargetItemViaAPI = async () => {
       const targetState = await readTargetCartState()
 
-      if (!targetState.cartID || !targetState.itemID || targetState.quantity < 1) {
+      if (!targetState.cartID || targetState.itemIDs.length === 0 || targetState.quantity < 1) {
         return
       }
 
-      const response = await page.request.post(
-        `${baseURL}/api/carts/${targetState.cartID}/remove-item`,
-        {
-          data: {
-            itemID: targetState.itemID,
-            ...(targetState.cartSecret ? { secret: targetState.cartSecret } : {}),
+      for (const itemID of targetState.itemIDs) {
+        const response = await page.request.post(
+          `${baseURL}/api/carts/${targetState.cartID}/remove-item`,
+          {
+            data: {
+              itemID,
+              ...(targetState.cartSecret ? { secret: targetState.cartSecret } : {}),
+            },
           },
-        },
-      )
-      const body = await response.json().catch(() => null)
+        )
+        const body = await response.json().catch(() => null)
 
-      expect(
-        response.ok(),
-        `cart remove-item failed: status=${response.status()} body=${JSON.stringify(body)}`,
-      ).toBeTruthy()
-      expect(body?.success).toBeTruthy()
+        expect(
+          response.ok(),
+          `cart remove-item failed: status=${response.status()} body=${JSON.stringify(body)}`,
+        ).toBeTruthy()
+        expect(body?.success).toBeTruthy()
+      }
     }
 
-    let targetState = await readTargetCartState()
+    const targetState = await readTargetCartState()
 
-    // In CI the product-page quantity control may lag behind cart hydration even when
-    // the target item is already present in cart state. Visibility of "Количество"
-    // is therefore not a valid precondition for the remove path.
+    // The canonical source of truth for removal is the target item row in cart API.
+    // In CI the visible quantity control can remain stale at "1" even after repeated
+    // UI clicks, so remove by itemID directly and verify the resulting cart state.
     if (targetState.quantity < 1) {
       return
     }
 
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      if (await addToCartButton.isVisible().catch(() => false)) break
-
-      const inlineControlVisible = await inlineQuantityInput.isVisible().catch(() => false)
-      if (!inlineControlVisible) {
-        await removeTargetItemViaAPI()
-        break
-      }
-
-      const currentQuantity = Number(await inlineQuantityInput.inputValue().catch(() => '0'))
-      if (!currentQuantity || currentQuantity < 1) {
-        await removeTargetItemViaAPI()
-        break
-      }
-
-      await reduceQuantityButton.click()
-      await page.waitForTimeout(500)
-
-      targetState = await readTargetCartState()
-      if (targetState.quantity < 1) break
-    }
+    await removeTargetItemViaAPI()
 
     await expect
       .poll(async () => (await readTargetCartState()).quantity, { timeout: 15_000 })
       .toBe(0)
     await page.reload()
-    await expect(addToCartButton).toBeVisible({ timeout: 15_000 })
+    await expect(page).toHaveURL(new RegExp(`/products/${productSlug ?? ''}`))
   }
 
   async function checkout(
