@@ -78,13 +78,15 @@ export const CheckoutPage: React.FC = () => {
         const quantity = item.quantity || 0
         const variant = item.variant && typeof item.variant === 'object' ? item.variant : undefined
 
-        const variantLabel = variant?.options
-          ?.map((option: VariantOptionValue) => {
-            if (typeof option === 'object') return option.label
-            return null
-          })
-          .filter(Boolean)
-          .join(', ')
+        const variantLabel = Array.isArray(variant?.options)
+          ? variant.options
+              .map((option: VariantOptionValue) => {
+                if (typeof option === 'object' && option?.label) return option.label
+                return null
+              })
+              .filter((label: string | null): label is string => Boolean(label))
+              .join(', ')
+          : undefined
 
         if (!quantity) return null
 
@@ -418,13 +420,14 @@ export const CheckoutPage: React.FC = () => {
                   ) : (
                     <p className="font-medium text-lg leading-tight">{title}</p>
                   )}
-                  {variant && typeof variant === 'object' && (
+                  {variant && typeof variant === 'object' && Array.isArray(variant.options) && (
                     <p className="text-sm font-mono text-primary/50 tracking-widest">
                       {variant.options
-                        ?.map((option: VariantOptionValue) => {
-                          if (typeof option === 'object') return option.label
+                        .map((option: VariantOptionValue) => {
+                          if (typeof option === 'object' && option?.label) return option.label
                           return null
                         })
+                        .filter((label): label is string => Boolean(label))
                         .join(', ')}
                     </p>
                   )}

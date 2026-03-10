@@ -83,10 +83,20 @@ export function CartModal() {
                   const image = firstGalleryImage || metaImage
                   let price = product.priceInUSD
 
-                  const isVariant = Boolean(variant) && typeof variant === 'object'
+                  const variantObject = variant && typeof variant === 'object' ? variant : null
+                  const isVariant = Boolean(variantObject)
+                  const variantOptionLabels =
+                    variantObject && Array.isArray(variantObject.options)
+                      ? variantObject.options
+                          .map((option: VariantOptionValue) => {
+                            if (typeof option === 'object' && option?.label) return option.label
+                            return null
+                          })
+                          .filter((label): label is string => Boolean(label))
+                      : []
 
                   if (isVariant) {
-                    price = variant?.priceInUSD
+                    price = variantObject?.priceInUSD
                   }
 
                   return (
@@ -113,14 +123,9 @@ export function CartModal() {
 
                           <div className="flex flex-1 flex-col text-base">
                             <span className="leading-tight">{product?.title}</span>
-                            {isVariant && variant ? (
+                            {isVariant && variantOptionLabels.length > 0 ? (
                               <p className="text-sm text-neutral-500 dark:text-neutral-400 capitalize">
-                                {variant.options
-                                  ?.map((option: VariantOptionValue) => {
-                                    if (typeof option === 'object') return option.label
-                                    return null
-                                  })
-                                  .join(', ')}
+                                {variantOptionLabels.join(', ')}
                               </p>
                             ) : null}
                           </div>
