@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test'
 import { getPayload } from 'payload'
 import config from '../../src/payload.config.js'
+import { withSqliteBusyRetry } from './dbRetry'
 
 test.describe('Admin Panel', () => {
   test.describe.configure({ timeout: 120_000 })
@@ -14,23 +15,35 @@ test.describe('Admin Panel', () => {
 
   test.beforeAll(async ({ browser }) => {
     const payload = await getPayload({ config })
-    const existing = await payload.find({
-      collection: 'users',
-      limit: 1,
-      where: { email: { equals: testUser.email } },
-    })
+    const existing = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'users',
+          limit: 1,
+          where: { email: { equals: testUser.email } },
+        }),
+      'admin.beforeAll.findUser',
+    )
 
     if (existing.docs.length > 0) {
-      await payload.update({
-        collection: 'users',
-        id: existing.docs[0].id,
-        data: { password: testUser.password, roles: ['admin'] },
-      })
+      await withSqliteBusyRetry(
+        () =>
+          payload.update({
+            collection: 'users',
+            id: existing.docs[0].id,
+            data: { password: testUser.password, roles: ['admin'] },
+          }),
+        'admin.beforeAll.updateUser',
+      )
     } else {
-      await payload.create({
-        collection: 'users',
-        data: { email: testUser.email, password: testUser.password, roles: ['admin'] },
-      })
+      await withSqliteBusyRetry(
+        () =>
+          payload.create({
+            collection: 'users',
+            data: { email: testUser.email, password: testUser.password, roles: ['admin'] },
+          }),
+        'admin.beforeAll.createUser',
+      )
     }
 
     const context = await browser.newContext()

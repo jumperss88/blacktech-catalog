@@ -3,6 +3,7 @@ import { test, expect, Page } from '@playwright/test'
 import { getPayload } from 'payload'
 import { fileURLToPath } from 'url'
 import config from '../../src/payload.config.js'
+import { withSqliteBusyRetry } from './dbRetry'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -413,25 +414,37 @@ test.describe('Frontend', () => {
 
   async function ensureAdminUser(email: string, password: string) {
     const payload = await getPayload({ config })
-    const existing = await payload.find({
-      collection: 'users',
-      limit: 1,
-      where: { email: { equals: email } },
-    })
+    const existing = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'users',
+          limit: 1,
+          where: { email: { equals: email } },
+        }),
+      'frontend.ensureAdminUser.findUser',
+    )
 
     if (existing.docs.length > 0) {
-      await payload.update({
-        collection: 'users',
-        id: existing.docs[0].id,
-        data: { password, roles: ['admin'] },
-      })
+      await withSqliteBusyRetry(
+        () =>
+          payload.update({
+            collection: 'users',
+            id: existing.docs[0].id,
+            data: { password, roles: ['admin'] },
+          }),
+        'frontend.ensureAdminUser.updateUser',
+      )
       return
     }
 
-    await payload.create({
-      collection: 'users',
-      data: { email, password, roles: ['admin'] },
-    })
+    await withSqliteBusyRetry(
+      () =>
+        payload.create({
+          collection: 'users',
+          data: { email, password, roles: ['admin'] },
+        }),
+      'frontend.ensureAdminUser.createUser',
+    )
   }
 
   async function createVariantsAndProducts(page: Page, request: any) {
