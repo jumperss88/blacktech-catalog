@@ -1,5 +1,5 @@
 'use client'
-import { useCurrency } from '@payloadcms/plugin-ecommerce/client/react'
+import { useEcommerce } from '@payloadcms/plugin-ecommerce/client/react'
 import { cn } from '@/utilities/cn'
 import React, { useMemo } from 'react'
 
@@ -35,7 +35,8 @@ export const Price = ({
   as = 'p',
   ...rest
 }: Props & React.ComponentProps<'p'>) => {
-  const { currency, supportedCurrencies } = useCurrency()
+  const { currenciesConfig, currency } = useEcommerce()
+  const supportedCurrencies = currenciesConfig?.supportedCurrencies || []
 
   const Element = as
 

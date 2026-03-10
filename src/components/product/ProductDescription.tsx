@@ -8,7 +8,7 @@ import React, { Suspense } from 'react'
 import { ChevronDown } from 'lucide-react'
 
 import { VariantSelector } from './VariantSelector'
-import { useCurrency } from '@payloadcms/plugin-ecommerce/client/react'
+import { useEcommerce } from '@payloadcms/plugin-ecommerce/client/react'
 import { StockIndicator } from '@/components/product/StockIndicator'
 
 type Props = {
@@ -18,34 +18,39 @@ type Props = {
 }
 
 export function ProductDescription({ hasExtraDescription, hasSpecifications, product }: Props) {
-  const { currency } = useCurrency()
+  const { currency } = useEcommerce()
+  const currencyCode = typeof currency?.code === 'string' && currency.code ? currency.code : 'USD'
   let amount = 0,
     lowestAmount = 0,
     highestAmount = 0
-  const priceField = `priceIn${currency.code}` as keyof Product
+  const priceField = `priceIn${currencyCode}` as keyof Product
   const hasVariants = product.enableVariants && Boolean(product.variants?.docs?.length)
 
   if (hasVariants) {
-    const priceField = `priceIn${currency.code}` as keyof Variant
+    const variantPriceField = `priceIn${currencyCode}` as keyof Variant
     const variantsOrderedByPrice = product.variants?.docs
       ?.filter((variant) => variant && typeof variant === 'object')
       .sort((a, b) => {
         if (
           typeof a === 'object' &&
           typeof b === 'object' &&
-          priceField in a &&
-          priceField in b &&
-          typeof a[priceField] === 'number' &&
-          typeof b[priceField] === 'number'
+          variantPriceField in a &&
+          variantPriceField in b &&
+          typeof a[variantPriceField] === 'number' &&
+          typeof b[variantPriceField] === 'number'
         ) {
-          return a[priceField] - b[priceField]
+          return a[variantPriceField] - b[variantPriceField]
         }
 
         return 0
       }) as Variant[]
 
-    const lowestVariant = variantsOrderedByPrice[0][priceField]
-    const highestVariant = variantsOrderedByPrice[variantsOrderedByPrice.length - 1][priceField]
+    const lowestVariant =
+      variantsOrderedByPrice.length > 0 ? variantsOrderedByPrice[0]?.[variantPriceField] : undefined
+    const highestVariant =
+      variantsOrderedByPrice.length > 0
+        ? variantsOrderedByPrice[variantsOrderedByPrice.length - 1]?.[variantPriceField]
+        : undefined
     if (
       variantsOrderedByPrice &&
       typeof lowestVariant === 'number' &&
