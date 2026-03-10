@@ -1187,6 +1187,11 @@ test.describe('Frontend', () => {
     const inlineQuantityInput = page.getByRole('textbox', { name: 'Количество' }).first()
     const decreaseInlineButton = page.getByRole('button', { name: 'Уменьшить количество' }).first()
 
+    const readInlineQuantity = async () => {
+      if (!(await inlineQuantityInput.isVisible().catch(() => false))) return 0
+      return Number(await inlineQuantityInput.inputValue().catch(() => '0'))
+    }
+
     if (!(await addToCartButton.isVisible().catch(() => false))) {
       if (
         variantButton &&
@@ -1206,23 +1211,39 @@ test.describe('Frontend', () => {
       }
     }
 
-    await page.waitForTimeout(500)
+    await expect
+      .poll(
+        async () => {
+          const canClickAddToCart = await addToCartButton.isVisible().catch(() => false)
+          const currentQuantity = await readInlineQuantity()
 
-    const canClickAddToCart = await addToCartButton.isVisible().catch(() => false)
-    const hasInlineQuantity = await inlineQuantityInput.isVisible().catch(() => false)
+          if (currentQuantity > 0) return 'already-in-cart'
+          if (canClickAddToCart) return 'ready-to-add'
 
-    if (canClickAddToCart) {
+          return 'pending'
+        },
+        { timeout: 15_000 },
+      )
+      .not.toBe('pending')
+
+    const initialQuantity = await readInlineQuantity()
+
+    if (initialQuantity < 1) {
+      const cartMutationPromise = page.waitForResponse(
+        (response) =>
+          ['POST', 'PATCH'].includes(response.request().method()) &&
+          response.url().includes('/api/carts') &&
+          response.ok(),
+        { timeout: 30_000 },
+      )
+
       await addToCartButton.click()
-    } else if (hasInlineQuantity) {
-      expect(Number(await inlineQuantityInput.inputValue())).toBeGreaterThan(0)
+      await cartMutationPromise
     }
 
     await expect
       .poll(
-        async () => {
-          if (!(await inlineQuantityInput.isVisible().catch(() => false))) return 0
-          return Number(await inlineQuantityInput.inputValue().catch(() => '0'))
-        },
+        readInlineQuantity,
         { timeout: 15_000 },
       )
       .toBeGreaterThan(0)
