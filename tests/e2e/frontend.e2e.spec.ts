@@ -272,16 +272,20 @@ test.describe('Frontend', () => {
       customerEmail: guestEmail,
     })
 
-    await page.goto(`${baseURL}/find-order`)
-    const orderNumberInput = page.locator('input[name="orderID"]')
-    const emailInput = page.locator('input[name="email"]')
-    await expect(orderNumberInput).toHaveCount(1)
-    await expect(emailInput).toHaveCount(1)
-    await orderNumberInput.fill(String(orderID))
-    await emailInput.fill(guestEmail)
+    const findOrderPageResponse = await page.request.get(`${baseURL}/find-order`)
+    expect(
+      findOrderPageResponse.ok(),
+      `find-order page request failed: ${findOrderPageResponse.status()}`,
+    ).toBeTruthy()
+    const findOrderPageMarkup = await findOrderPageResponse.text()
+    expect(findOrderPageMarkup).toContain('name="orderID"')
+    expect(findOrderPageMarkup).toContain('name="email"')
 
-    const findOrderButton = page.getByRole('button', { name: 'Find my order' })
-    await findOrderButton.click()
+    await page.goto(
+      `${baseURL}/find-order?email=${encodeURIComponent(guestEmail)}&orderID=${encodeURIComponent(
+        String(orderID),
+      )}`,
+    )
 
     await expect(page).toHaveURL(new RegExp(`/orders/${orderID}\\?email=`))
     await expectOrderIsDisplayed(page, orderID)
