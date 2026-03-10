@@ -36,6 +36,24 @@ type RequestPayload = {
   subtotal?: number
 }
 
+const isCartItemAvailable = (item: CartItem): boolean => {
+  const product = item?.product
+  if (!item || !product || typeof product !== 'object') return false
+  if (!item.quantity || item.quantity < 1) return false
+
+  const variant = item.variant && typeof item.variant === 'object' ? item.variant : undefined
+  const inventory =
+    typeof variant?.inventory === 'number'
+      ? variant.inventory
+      : typeof product.inventory === 'number'
+        ? product.inventory
+        : undefined
+
+  if (typeof inventory === 'number' && inventory < 1) return false
+
+  return true
+}
+
 export const CheckoutPage: React.FC = () => {
   const { user } = useAuth()
   const { cart, clearCart, decrementItem, incrementItem, isLoading } = useCart()
@@ -62,18 +80,24 @@ export const CheckoutPage: React.FC = () => {
     }
   }, [user?.email, user?.name])
 
-  const cartIsEmpty = !cart || !cart.items || cart.items.length === 0
+  const activeCartItems = useMemo(() => {
+    if (!cart?.items?.length) return []
+
+    return cart.items.filter((item) => {
+      const itemID = item.id ? String(item.id) : undefined
+      if (itemID && removedItemIDs[itemID]) return false
+      return isCartItemAvailable(item)
+    })
+  }, [cart?.items, removedItemIDs])
+
+  const cartIsEmpty = activeCartItems.length === 0
   const hasContact = Boolean(phone.trim() || email.trim())
 
   const requestItems = useMemo<RequestPayload['items']>(() => {
-    if (!cart?.items?.length) return []
+    if (!activeCartItems.length) return []
 
-    return cart.items
+    return activeCartItems
       .map((item) => {
-        const itemID = item.id ? String(item.id) : undefined
-        if (itemID && removedItemIDs[itemID]) return null
-        if (!item || typeof item.product !== 'object') return null
-
         const product = item.product
         const quantity = item.quantity || 0
         const variant = item.variant && typeof item.variant === 'object' ? item.variant : undefined
@@ -103,14 +127,12 @@ export const CheckoutPage: React.FC = () => {
         }
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
-  }, [cart?.items, removedItemIDs])
+  }, [activeCartItems])
 
   const activeSubtotal = useMemo(() => {
-    if (!cart?.items?.length) return 0
+    if (!activeCartItems.length) return 0
 
-    return cart.items.reduce((sum, item) => {
-      const itemID = item.id ? String(item.id) : undefined
-      if (!itemID || removedItemIDs[itemID]) return sum
+    return activeCartItems.reduce((sum, item) => {
       if (!item.quantity || typeof item.product !== 'object') return sum
 
       const variant = item.variant && typeof item.variant === 'object' ? item.variant : undefined
@@ -119,7 +141,7 @@ export const CheckoutPage: React.FC = () => {
 
       return sum + price * item.quantity
     }, 0)
-  }, [cart?.items, removedItemIDs])
+  }, [activeCartItems])
 
   const submitRequest = async () => {
     if (!hasContact) {
