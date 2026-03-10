@@ -36,25 +36,25 @@ export function HeaderClient({ categories, menu }: Props) {
 
   return (
     <div className="sticky top-0 z-50 border-b bg-background/92 backdrop-blur-md supports-[backdrop-filter]:bg-background/82">
-      <nav className="container flex h-16 items-center justify-between">
+      <nav className="headerNav container flex h-16 items-center justify-between md:h-16">
         <div className="block flex-none md:hidden">
           <MobileMenu categories={categories} menu={menu} />
         </div>
         <div className="flex w-full items-center justify-between gap-4">
-          <div className="flex w-full items-center gap-6 md:flex-1">
-            <Link className="flex w-full items-center justify-center md:w-auto" href="/">
+          <div className="headerMainGroup flex w-full items-center gap-7 md:w-auto">
+            <Link className="headerBrandLink flex w-full items-center justify-center md:w-auto" href="/">
               <img
                 src="/blacklogo.svg"
                 alt="Black Tech Light"
                 className="headerBrandLogo"
               />
             </Link>
-            <ul className="hidden gap-4 text-sm md:flex md:items-center">
+            <ul className="headerNavList hidden md:flex md:items-center">
               {menu.map((item) => (
                 <li key={item.id}>
                   <Link
                     href={item.href}
-                    className={cn('relative navLink px-0.5 py-1', {
+                    className={cn('headerNavLink relative navLink', {
                       active: item.href !== '/' ? pathname.includes(item.href) : false,
                     })}
                   >
@@ -65,7 +65,7 @@ export function HeaderClient({ categories, menu }: Props) {
             </ul>
           </div>
 
-          <div className="flex shrink-0 items-center justify-end gap-2">
+          <div className="headerActions flex shrink-0 items-center justify-end gap-2.5">
             <Suspense fallback={null}>
               <SearchOverlay />
             </Suspense>
@@ -73,7 +73,7 @@ export function HeaderClient({ categories, menu }: Props) {
             <div className="catalogDropdown">
               <Button
                 asChild
-                className="hidden md:inline-flex gap-2 font-mono text-xs font-normal uppercase tracking-widest"
+                className="headerCatalogButton hidden md:inline-flex h-9 w-32 gap-1.5 rounded-[10px] px-0 font-mono text-base font-normal uppercase tracking-normal"
                 variant="outline"
               >
                 <Link href="/catalog">

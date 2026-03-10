@@ -15,7 +15,7 @@ const defaultNavItems = [
   },
   {
     id: 'contacts',
-    link: { type: 'custom' as const, label: 'Контакты', url: '/goszakupki-44-fz-223-fz' },
+    link: { type: 'custom' as const, label: 'Контакты', url: '/kontakty' },
   },
 ]
 
