@@ -30,8 +30,9 @@ corepack pnpm run dev
 ```
 
 Локальные URL:
-- сайт: `http://localhost:3000`
-- админка: `http://localhost:3000/admin`
+- каноничный release/e2e base URL: `http://127.0.0.1:3000`
+- сайт: `http://127.0.0.1:3000`
+- админка: `http://127.0.0.1:3000/admin`
 
 ## 1.4 Минимальный smoke-check после старта
 ```bash
@@ -44,6 +45,10 @@ corepack pnpm run lint
 corepack pnpm run test:e2e:install-browsers
 corepack pnpm run check:deploy
 ```
+
+Правило для QA/release-check:
+- проверка идет только через `http://127.0.0.1:3000`
+- `dev`, `test:e2e` и `check:deploy` закреплены на порту `3000`
 
 ---
 

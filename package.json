@@ -8,7 +8,7 @@
     "build": "cross-env NODE_OPTIONS=\"--no-deprecation --max-old-space-size=8000\" next build",
     "check:deploy": "corepack pnpm run check:types && corepack pnpm run test:int && corepack pnpm run build && corepack pnpm run test:e2e",
     "check:types": "corepack pnpm exec tsc --noEmit",
-    "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev",
+    "dev": "cross-env PORT=3000 NODE_OPTIONS=--no-deprecation next dev",
     "dev:prod": "cross-env NODE_OPTIONS=--no-deprecation rm -rf .next && corepack pnpm build && corepack pnpm start",
     "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
     "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
@@ -25,7 +25,7 @@
     "stripe-webhooks": "stripe listen --forward-to localhost:3000/api/stripe/webhooks",
     "test": "corepack pnpm run test:int && corepack pnpm run test:e2e",
     "test:e2e:install-browsers": "corepack pnpm exec playwright install chromium",
-    "test:e2e": "rm -rf .next && cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts --workers=1",
+    "test:e2e": "rm -rf .next && cross-env PORT=3000 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts --workers=1",
     "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts"
   },
   "dependencies": {
