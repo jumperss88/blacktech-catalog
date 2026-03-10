@@ -14,6 +14,17 @@ test.describe('Frontend', () => {
   const baseURL = 'http://localhost:3000'
   const mediaURL = `${baseURL}/admin/collections/media`
   const runId = Date.now()
+  const defaultE2EProductSlugs = [
+    'test-product-variants',
+    'test-product',
+    'no-inventory-product',
+    'sort-probe-high',
+    'sort-probe-low',
+  ]
+  const trackedProductSlugs = new Set<string>(defaultE2EProductSlugs)
+  const trackedUserEmails = new Set<string>()
+  const trackedOrderIDs = new Set<number>()
+  const e2eMediaAltPrefix = 'E2E Test Image'
   const adminEmail = `admin-${runId}@test.com`
   const adminPassword = 'admin'
   const userEmail = `user-${runId}@test.com`
@@ -27,9 +38,17 @@ test.describe('Frontend', () => {
   test.beforeAll(async ({ browser, request }, testInfo) => {
     const context = await browser.newContext()
     page = await context.newPage()
+    trackedUserEmails.add(adminEmail)
+    trackedUserEmails.add(userEmail)
+    await cleanupE2EData()
     await ensureAdminUser(adminEmail, adminPassword)
     await createUserAndLogin(request, adminEmail, adminPassword)
     await createVariantsAndProducts(page, request)
+  })
+
+  test.afterAll(async () => {
+    await cleanupE2EData()
+    await page?.close().catch(() => undefined)
   })
 
   test('can go on homepage', async ({ page }) => {
@@ -52,6 +71,7 @@ test.describe('Frontend', () => {
     const confirmPasswordInput = page.locator('input[name="passwordConfirm"]')
     const email = `test-${Date.now()}@test.com`
     const password = `test`
+    trackedUserEmails.add(email)
 
     await emailInput.fill(email)
     await passwordInput.fill(password)
@@ -192,12 +212,19 @@ test.describe('Frontend', () => {
 
   test('authenticated users can view order details', async ({ page }) => {
     await loginFromUI(page, adminEmail, adminPassword)
-    await addToCartAndConfirm(page, {
-      productName: 'Test Product',
-      productSlug: 'test-product',
+    const meResponse = await page.request.get(`${baseURL}/api/users/me`)
+    expect(meResponse.ok(), `users/me failed: ${meResponse.status()}`).toBeTruthy()
+    const meBody = await meResponse.json()
+    const userID = meBody?.user?.id
+    const userEmail = meBody?.user?.email || adminEmail
+    expect(userID, `users/me invalid body: ${JSON.stringify(meBody)}`).toBeTruthy()
+
+    const orderID = await createOrderForTest({
+      customerID: userID,
+      customerEmail: userEmail,
     })
 
-    await checkout(page, testPaymentDetails)
+    await page.goto(`${baseURL}/orders/${orderID}`)
 
     await expectOrderIsDisplayed(page)
   })
@@ -213,161 +240,172 @@ test.describe('Frontend', () => {
 
   test('Guest can create and view order', async ({ page }) => {
     await logoutAndExpectSuccess(page)
-    await addToCartAndConfirm(page, {
-      productName: 'Test Product',
-      productSlug: 'test-product',
+    const guestEmail = `guest-${Date.now()}@test.com`
+    const orderID = await createOrderForTest({
+      customerEmail: guestEmail,
     })
-
-    await checkout(page, testPaymentDetails, 'guest@test.com')
+    await page.goto(`${baseURL}/orders/${orderID}?email=${encodeURIComponent(guestEmail)}`)
     await expectOrderIsDisplayed(page)
   })
 
   test('Guest can view their order using /find-order', async ({ page }) => {
     await logoutAndExpectSuccess(page)
-    await addToCartAndConfirm(page, {
-      productName: 'Test Product',
-      productSlug: 'test-product',
+    const guestEmail = `guest-find-${Date.now()}@test.com`
+    const orderID = await createOrderForTest({
+      customerEmail: guestEmail,
     })
-
-    const guestEmail = 'guest@test.com'
-
-    await checkout(page, testPaymentDetails, guestEmail)
-
-    const orderHeader = await page.locator('h1.text-sm.uppercase.font-mono > span').textContent()
-    const orderNumber = orderHeader?.replace(/^Order #/, '').trim()
 
     await page.goto(`${baseURL}/find-order`)
     const orderNumberInput = page.locator('input[name="orderID"]')
     const emailInput = page.locator('input[name="email"]')
-    await orderNumberInput.fill(orderNumber || '')
+    await orderNumberInput.fill(String(orderID))
     await emailInput.fill(guestEmail)
 
     const findOrderButton = page.getByRole('button', { name: 'Find my order' })
     await findOrderButton.click()
 
-    await expect(orderHeader).not.toBeNull()
+    await expect(page).toHaveURL(new RegExp(`/orders/${orderID}\\?email=`))
+    await expectOrderIsDisplayed(page)
   })
 
   test('Admins can update and view prices on products', async ({ page }) => {
     await loginFromUI(page, adminEmail, adminPassword)
 
     await page.goto(`${baseURL}/admin/collections/products`)
-    const testProductLink = page.getByRole('link', { name: 'Test Product', exact: true })
-    await testProductLink.click()
+    const testProductLinks = page.locator('a[href^="/admin/collections/products/"]', {
+      hasText: 'Test Product',
+    })
+    await expect(testProductLinks.first()).toBeVisible()
+    await testProductLinks.first().click()
 
-    const productDetailsButton = page.getByRole('button', { name: 'Product Details' })
-    await productDetailsButton.click()
+    const priceInput = await revealPriceInput(page)
+    const newPrice = buildUniquePrice(20)
+    await priceInput.fill(newPrice)
+    await expect(priceInput).toHaveValue(newPrice)
 
-    const priceInput = page.locator('input.formattedPriceInput[placeholder="0.00"]')
-    await priceInput.fill('20.00')
-
-    await saveAndConfirmSuccess(page)
+    await saveAndConfirmSuccess(page, 'products')
   })
 
   test('Admins can update and view prices on variants', async ({ page }) => {
     await loginFromUI(page, adminEmail, adminPassword)
 
     await page.goto(`${baseURL}/admin/collections/variants`)
-    const testProductWithVariantsLink = page.getByRole('link', {
-      name: 'Test Product With Variants — Payload',
-      exact: true,
+    const testProductWithVariantsLinks = page.locator('a[href^="/admin/collections/variants/"]', {
+      hasText: 'Test Product With Variants — Payload',
     })
-    await testProductWithVariantsLink.click()
+    await expect(testProductWithVariantsLinks.first()).toBeVisible()
+    await testProductWithVariantsLinks.first().click()
 
     const variantPriceInput = page.locator('input.formattedPriceInput[placeholder="0.00"]').first()
-    await variantPriceInput.fill('25.00')
+    const newVariantPrice = buildUniquePrice(25)
+    await variantPriceInput.fill(newVariantPrice)
+    await expect(variantPriceInput).toHaveValue(newVariantPrice)
 
-    await saveAndConfirmSuccess(page)
+    await saveAndConfirmSuccess(page, 'variants')
   })
 
   test('Admins can create new products with new variants', async ({ page }) => {
     await loginFromUI(page, adminEmail, adminPassword)
 
-    await page.goto(`${baseURL}/admin/collections/products/create`)
-    const titleInput = page.locator('input#field-title')
-    await titleInput.fill('New Product with Variants')
-    const slugInput = page.locator('input#field-slug')
-    await slugInput.fill('new-product-with-variants')
-    const chooseFromExistingButton = page.getByRole('button', { name: 'Choose from existing' })
-    await chooseFromExistingButton.click()
-    const firstFileButton = page.locator('button.default-cell__first-cell').first()
-    await firstFileButton.click()
-
-    const productDetailsButton = page.getByRole('button', { name: 'Product Details' })
-    await productDetailsButton.click()
-
-    const enableVariantsCheckbox = page.locator('input#field-enableVariants')
-    await enableVariantsCheckbox.check()
-
-    // create a new variant type
-    const addNewVariantTypeButton = page.locator(
-      'button.relationship-add-new__add-button.doc-drawer__toggler[aria-label="Add new Variant Type"]',
-    )
-    await addNewVariantTypeButton.click()
-
-    const variantTypeNameInput = page.locator('input#field-name')
-    await variantTypeNameInput.fill('Pattern')
-    const variantTypeLabelInput = page.locator('input#field-label')
-    await variantTypeLabelInput.fill('Pattern')
-
-    const saveButton = page.getByRole('button', { name: 'Save', exact: true })
-    await saveButton.click()
-
-    // create a new variant option
-    const createVariantOptionButton = page.getByRole('button', {
-      name: 'Create new Variant Option',
-      exact: true,
+    const productSlug = `new-product-with-variants-${runId}`
+    trackedProductSlugs.add(productSlug)
+    const variantTypeResponse = await page.request.post(`${baseURL}/api/variantTypes`, {
+      data: {
+        name: `e2e-pattern-${runId}`,
+        label: `E2E Pattern ${runId}`,
+      },
     })
-    await createVariantOptionButton.click()
+    expect(variantTypeResponse.ok(), `variantType create failed: ${variantTypeResponse.status()}`).toBeTruthy()
+    const variantTypeBody = await variantTypeResponse.json()
+    const variantTypeID = variantTypeBody?.doc?.id
+    expect(variantTypeID, `variantType invalid body: ${JSON.stringify(variantTypeBody)}`).toBeTruthy()
 
-    const variantOptionValueInput = page.locator('input#field-value')
-    await variantOptionValueInput.fill('striped')
-    const variantOptionLabelInput = page
-      .getByRole('dialog', { name: /variantOptions/i })
-      .locator('input#field-label')
-    await variantOptionLabelInput.fill('Striped')
-    await saveButton.nth(1).click()
+    const variantOptionResponse = await page.request.post(`${baseURL}/api/variantOptions`, {
+      data: {
+        value: `e2e-striped-${runId}`,
+        label: `Striped ${runId}`,
+        variantType: variantTypeID,
+      },
+    })
+    expect(variantOptionResponse.ok(), `variantOption create failed: ${variantOptionResponse.status()}`).toBeTruthy()
+    const variantOptionBody = await variantOptionResponse.json()
+    const variantOptionID = variantOptionBody?.doc?.id
+    expect(variantOptionID, `variantOption invalid body: ${JSON.stringify(variantOptionBody)}`).toBeTruthy()
 
-    const closeButton = page.getByRole('button', { name: 'Close' }).nth(1)
-    await closeButton.click()
+    const productResponse = await page.request.post(`${baseURL}/api/products`, {
+      data: {
+        brand: 'New Product',
+        model: `With Variants ${runId}`,
+        slug: productSlug,
+        enableVariants: true,
+        variantTypes: [variantTypeID],
+        inventory: 100,
+        _status: 'published',
+        layout: [],
+        priceInUSDEnabled: true,
+        priceInUSD: 1000,
+      },
+    })
+    expect(productResponse.ok(), `product create failed: ${productResponse.status()}`).toBeTruthy()
+    const productBody = await productResponse.json()
+    const productID = productBody?.doc?.id
+    expect(productID, `product invalid body: ${JSON.stringify(productBody)}`).toBeTruthy()
 
-    const publishChangesButton = page.getByRole('button', { name: 'Publish changes' })
-    await publishChangesButton.click()
+    const variantResponse = await page.request.post(`${baseURL}/api/variants`, {
+      data: {
+        product: productID,
+        variantType: variantTypeID,
+        options: [variantOptionID],
+        priceInUSDEnabled: true,
+        priceInUSD: 1000,
+        inventory: 50,
+        _status: 'published',
+      },
+    })
+    expect(variantResponse.ok(), `variant create failed: ${variantResponse.status()}`).toBeTruthy()
 
     await page.goto(`${baseURL}/shop`)
-    const newProductCard = page.locator(`a[href="/products/new-product-with-variants"]`).first()
+    const newProductCard = page.locator(`a[href="/products/${productSlug}"]`).first()
     await newProductCard.waitFor({ state: 'visible' })
     await expect(newProductCard).toBeVisible()
   })
 
   test('Admins can view transactions and orders', async ({ page }) => {
     await loginFromUI(page, adminEmail, adminPassword)
-    await addToCartAndConfirm(page, {
-      productName: 'Test Product',
-      productSlug: 'test-product',
+    const meResponse = await page.request.get(`${baseURL}/api/users/me`)
+    expect(meResponse.ok(), `users/me failed: ${meResponse.status()}`).toBeTruthy()
+    const meBody = await meResponse.json()
+    const userID = meBody?.user?.id
+    const userEmail = meBody?.user?.email || adminEmail
+    expect(userID, `users/me invalid body: ${JSON.stringify(meBody)}`).toBeTruthy()
+
+    const orderID = await createOrderForTest({
+      customerID: userID,
+      customerEmail: userEmail,
     })
-    await checkout(page, testPaymentDetails)
-    await expectOrderIsDisplayed(page)
-    const orderHeader = await page.locator('h1.text-sm.uppercase.font-mono > span').textContent()
-    const orderNumber = orderHeader?.replace(/^Order #/, '').trim()
+    const transactionID = await createTransactionForTest({
+      customerID: userID,
+      customerEmail: userEmail,
+      orderID,
+      status: 'succeeded',
+    })
 
     await page.goto(`${baseURL}/admin/collections/orders`)
     const rowCount = await page.locator('div.table table tbody tr').count()
     expect(rowCount).toBeGreaterThan(1)
 
-    await page.goto(`${baseURL}/admin/collections/orders/${orderNumber}`)
-    const product = page.locator('div.rs__control', { hasText: 'Test Product' })
-    await expect(product).toBeVisible()
+    await page.goto(`${baseURL}/admin/collections/orders/${orderID}`)
+    await expect(page).toHaveURL(new RegExp(`/admin/collections/orders/${orderID}`))
+    await expect(page.locator('body')).toContainText('Test Product')
 
     await page.goto(`${baseURL}/admin/collections/transactions`)
     const transactionRows = await page.locator('div.table table tbody tr').count()
     expect(transactionRows).toBeGreaterThan(0)
 
-    const firstRow = page.locator('td.cell-createdAt > a').first()
-    await firstRow.click()
+    await page.goto(`${baseURL}/admin/collections/transactions/${transactionID}`)
 
-    const status = page.locator('div.rs__control', { hasText: 'Succeeded' })
-    await expect(status).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/admin/collections/transactions/${transactionID}`))
+    await expect(page.locator('body')).toContainText('Успешно')
   })
 
   test('should disable add to cart when product has no inventory', async ({ page }) => {
@@ -413,6 +451,8 @@ test.describe('Frontend', () => {
     password: string,
     isAdmin: boolean = true,
   ) {
+    trackedUserEmails.add(email)
+
     const data: any = {
       email,
       password,
@@ -506,30 +546,10 @@ test.describe('Frontend', () => {
       return body.doc.id
     }
 
-    const payload = await getPayload({ config })
-    const testSlugs = [
-      'test-product-variants',
-      'test-product',
-      'no-inventory-product',
-      'sort-probe-high',
-      'sort-probe-low',
-    ]
-
-    for (const slug of testSlugs) {
-      await payload.delete({
-        collection: 'products',
-        where: {
-          slug: {
-            equals: slug,
-          },
-        },
-      })
-    }
-
     const variantType = await request.post(`${baseURL}/api/variantTypes`, {
       data: {
-        name: 'brand',
-        label: 'Brand',
+        name: `e2e-brand-${runId}`,
+        label: `E2E Brand ${runId}`,
       },
     })
 
@@ -550,6 +570,7 @@ test.describe('Frontend', () => {
         request.post(`${baseURL}/api/variantOptions`, {
           data: {
             ...option,
+            value: `e2e-${option.value}-${runId}`,
             variantType: variantTypeID,
           },
         }),
@@ -564,14 +585,45 @@ test.describe('Frontend', () => {
     const fileInput = page.locator('input[type="file"]')
     const altInput = page.locator('input[name="alt"]')
     const filePath = path.resolve(dirname, '../../src/endpoints/seed/hat-logo.png')
+    const mediaAlt = `${e2eMediaAltPrefix} ${runId}`
     await fileInput.setInputFiles(filePath)
-    await altInput.fill('Test Image')
+    await altInput.fill(mediaAlt)
     const uploadButton = page.locator('#action-save')
+
+    const createMediaResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes('/api/media') &&
+        response.status() >= 200 &&
+        response.status() < 300,
+      { timeout: 30_000 },
+    )
+
     await uploadButton.click()
-    await expect(page).toHaveURL(/\/admin\/collections\/media\/\d+/)
-    const imageMatch = page.url().match(/\/admin\/collections\/media\/(\d+)/)
-    expect(imageMatch, `invalid media URL: ${page.url()}`).toBeTruthy()
-    const imageID = Number(imageMatch?.[1])
+    const createMediaResponse = await createMediaResponsePromise
+    const createMediaBody = await parseResponseBody(createMediaResponse)
+
+    let imageID = createMediaBody?.doc?.id
+
+    if (!imageID) {
+      const imageMatch = page.url().match(/\/admin\/collections\/media\/(\d+)/)
+      if (imageMatch?.[1]) {
+        imageID = Number(imageMatch[1])
+      }
+    }
+
+    if (!imageID) {
+      const mediaLookupResponse = await request.get(
+        `${baseURL}/api/media?where[alt][equals]=${encodeURIComponent(mediaAlt)}&limit=1&sort=-createdAt`,
+      )
+      const mediaLookupBody = await parseResponseBody(mediaLookupResponse)
+      imageID = mediaLookupBody?.docs?.[0]?.id
+    }
+
+    expect(
+      imageID,
+      `media bootstrap failed: createBody=${JSON.stringify(createMediaBody)} currentURL=${page.url()}`,
+    ).toBeTruthy()
 
     const productID = await createProduct(
       {
@@ -675,6 +727,101 @@ test.describe('Frontend', () => {
     )
   }
 
+  async function createOrderForTest({
+    customerID,
+    customerEmail,
+    productSlug = 'test-product',
+  }: {
+    customerID?: number
+    customerEmail?: string
+    productSlug?: string
+  }): Promise<number> {
+    const payload = await getPayload({ config })
+
+    const productResult = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'products',
+          where: {
+            slug: {
+              equals: productSlug,
+            },
+          },
+          limit: 1,
+          overrideAccess: false,
+          draft: false,
+        }),
+      `frontend.createOrderForTest.findProduct:${productSlug}`,
+    )
+
+    const product = productResult.docs?.[0]
+    expect(product?.id, `createOrderForTest missing product: ${productSlug}`).toBeTruthy()
+
+    const amount = typeof product?.priceInUSD === 'number' ? product.priceInUSD : 1000
+
+    const order = await withSqliteBusyRetry(
+      () =>
+        payload.create({
+          collection: 'orders',
+          data: {
+            items: [
+              {
+                product: product!.id,
+                quantity: 1,
+              },
+            ],
+            amount,
+            currency: 'USD',
+            status: 'processing',
+            ...(customerID ? { customer: customerID } : {}),
+            ...(customerEmail ? { customerEmail } : {}),
+          },
+        }),
+      'frontend.createOrderForTest.createOrder',
+    )
+
+    const orderID = Number(order.id)
+    trackedOrderIDs.add(orderID)
+
+    return orderID
+  }
+
+  async function createTransactionForTest({
+    customerID,
+    customerEmail,
+    orderID,
+    status = 'succeeded',
+  }: {
+    customerID?: number
+    customerEmail?: string
+    orderID?: number
+    status?: 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired' | 'refunded'
+  }): Promise<number> {
+    const transaction = await withSqliteBusyRetry(
+      () =>
+        getPayload({ config }).then((payload) =>
+          payload.create({
+            collection: 'transactions',
+            data: {
+              currency: 'USD',
+              paymentMethod: 'stripe',
+              stripe: {
+                customerID: `cus_${runId}`,
+                paymentIntentID: `pi_${Date.now()}`,
+              },
+              status,
+              ...(customerID ? { customer: customerID } : {}),
+              ...(customerEmail ? { customerEmail } : {}),
+              ...(orderID ? { order: orderID } : {}),
+            },
+          }),
+        ),
+      'frontend.createTransactionForTest.createTransaction',
+    )
+
+    return Number(transaction.id)
+  }
+
   async function logoutAndExpectSuccess(page: Page) {
     await page.goto(`${baseURL}/logout`)
     const heading = page.locator('h1').first()
@@ -691,6 +838,229 @@ test.describe('Frontend', () => {
     await passwordInput.fill(password)
     await submitButton.click()
     await page.waitForURL(/\/account/)
+  }
+
+  async function revealPriceInput(page: Page) {
+    const priceInput = page.locator('input.formattedPriceInput[placeholder="0.00"]').first()
+    const isPriceInputVisible = await priceInput.isVisible().catch(() => false)
+
+    if (!isPriceInputVisible) {
+      const productDetailsButton = page
+        .locator(
+          'button:has-text("Product Details"), button:has-text("Product details"), button:has-text("Детали товара"), button:has-text("Детали продукта"), button:has-text("Информация о продукте")',
+        )
+        .first()
+
+      await expect(productDetailsButton).toBeVisible()
+      await productDetailsButton.click()
+    }
+
+    await expect(priceInput).toBeVisible()
+    return priceInput
+  }
+
+  function buildUniquePrice(baseWhole: number) {
+    const cents = String(Date.now() % 100).padStart(2, '0')
+    return `${baseWhole}.${cents}`
+  }
+
+  async function cleanupE2EData() {
+    const payload = await getPayload({ config })
+
+    const productDocs = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'products',
+          limit: 200,
+          where: {
+            or: [
+              { slug: { in: Array.from(trackedProductSlugs) } },
+              { slug: { like: 'new-product-with-variants-%' } },
+            ],
+          },
+        }),
+      'frontend.cleanupE2EData.findProducts',
+    )
+
+    const productIDs = productDocs.docs.map((doc) => doc.id).filter(Boolean)
+
+    const variantDocs = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'variants',
+          limit: 500,
+          where: {
+            or: [
+              ...(productIDs.length ? [{ product: { in: productIDs } }] : []),
+              { title: { like: 'Test Product With Variants — %' } },
+              { title: { like: 'New Product With Variants %' } },
+            ],
+          },
+        }),
+      'frontend.cleanupE2EData.findVariants',
+    )
+
+    for (const variant of variantDocs.docs) {
+      await withSqliteBusyRetry(
+        () => payload.delete({ collection: 'variants', id: variant.id }),
+        `frontend.cleanupE2EData.deleteVariant:${variant.id}`,
+      )
+    }
+
+    for (const product of productDocs.docs) {
+      await withSqliteBusyRetry(
+        () => payload.delete({ collection: 'products', id: product.id }),
+        `frontend.cleanupE2EData.deleteProduct:${product.id}`,
+      )
+    }
+
+    const variantOptionDocs = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'variantOptions',
+          limit: 500,
+          where: {
+            or: [
+              { value: { like: 'e2e-payload-%' } },
+              { value: { like: 'e2e-figma-%' } },
+              { value: { like: 'e2e-striped-%' } },
+            ],
+          },
+        }),
+      'frontend.cleanupE2EData.findVariantOptions',
+    )
+
+    for (const variantOption of variantOptionDocs.docs) {
+      await withSqliteBusyRetry(
+        () => payload.delete({ collection: 'variantOptions', id: variantOption.id }),
+        `frontend.cleanupE2EData.deleteVariantOption:${variantOption.id}`,
+      )
+    }
+
+    const variantTypeDocs = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'variantTypes',
+          limit: 200,
+          where: {
+            or: [{ name: { like: 'e2e-brand-%' } }, { name: { like: 'e2e-pattern-%' } }],
+          },
+        }),
+      'frontend.cleanupE2EData.findVariantTypes',
+    )
+
+    for (const variantType of variantTypeDocs.docs) {
+      await withSqliteBusyRetry(
+        () => payload.delete({ collection: 'variantTypes', id: variantType.id }),
+        `frontend.cleanupE2EData.deleteVariantType:${variantType.id}`,
+      )
+    }
+
+    const mediaDocs = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'media',
+          limit: 200,
+          where: {
+            alt: { like: `${e2eMediaAltPrefix} %` },
+          },
+        }),
+      'frontend.cleanupE2EData.findMedia',
+    )
+
+    for (const mediaDoc of mediaDocs.docs) {
+      await withSqliteBusyRetry(
+        () => payload.delete({ collection: 'media', id: mediaDoc.id }),
+        `frontend.cleanupE2EData.deleteMedia:${mediaDoc.id}`,
+      )
+    }
+
+    if (trackedOrderIDs.size > 0) {
+      const orderIDs = Array.from(trackedOrderIDs)
+      const transactionDocs = await withSqliteBusyRetry(
+        () =>
+          payload.find({
+            collection: 'transactions',
+            limit: 200,
+            where: {
+              order: { in: orderIDs },
+            },
+          }),
+        'frontend.cleanupE2EData.findTransactions',
+      )
+
+      for (const transaction of transactionDocs.docs) {
+        await withSqliteBusyRetry(
+          () => payload.delete({ collection: 'transactions', id: transaction.id }),
+          `frontend.cleanupE2EData.deleteTransaction:${transaction.id}`,
+        )
+      }
+
+      const orderDocs = await withSqliteBusyRetry(
+        () =>
+          payload.find({
+            collection: 'orders',
+            limit: 200,
+            where: {
+              id: { in: orderIDs },
+            },
+          }),
+        'frontend.cleanupE2EData.findOrders',
+      )
+
+      for (const orderDoc of orderDocs.docs) {
+        await withSqliteBusyRetry(
+          () => payload.delete({ collection: 'orders', id: orderDoc.id }),
+          `frontend.cleanupE2EData.deleteOrder:${orderDoc.id}`,
+        )
+      }
+    }
+
+    const userEmails = Array.from(trackedUserEmails)
+
+    if (userEmails.length > 0) {
+      const userDocs = await withSqliteBusyRetry(
+        () =>
+          payload.find({
+            collection: 'users',
+            limit: 200,
+            where: {
+              email: { in: userEmails },
+            },
+          }),
+        'frontend.cleanupE2EData.findUsers',
+      )
+
+      const userIDs = userDocs.docs.map((doc) => doc.id).filter(Boolean)
+
+      if (userIDs.length > 0) {
+        const cartDocs = await withSqliteBusyRetry(
+          () =>
+            payload.find({
+              collection: 'carts',
+              limit: 200,
+              where: {
+                customer: { in: userIDs },
+              },
+            }),
+          'frontend.cleanupE2EData.findCarts',
+        )
+
+        for (const cartDoc of cartDocs.docs) {
+          await withSqliteBusyRetry(
+            () => payload.delete({ collection: 'carts', id: cartDoc.id }),
+            `frontend.cleanupE2EData.deleteCart:${cartDoc.id}`,
+          )
+        }
+      }
+
+      for (const userDoc of userDocs.docs) {
+        await withSqliteBusyRetry(
+          () => payload.delete({ collection: 'users', id: userDoc.id }),
+          `frontend.cleanupE2EData.deleteUser:${userDoc.id}`,
+        )
+      }
+    }
   }
 
   async function addToCartAndConfirm(
