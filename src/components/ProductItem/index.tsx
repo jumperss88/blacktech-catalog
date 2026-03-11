@@ -48,11 +48,12 @@ export const ProductItem: React.FC<Props> = ({
           </p>
           {variant && (
             <p className="text-sm font-mono text-primary/50 tracking-widest">
-              {variant.options
-                ?.map((option) => {
-                  if (typeof option === 'object') return option.label
+              {(Array.isArray(variant.options) ? variant.options : [])
+                .map((option) => {
+                  if (typeof option === 'object' && option?.label) return option.label
                   return null
                 })
+                .filter((label): label is string => Boolean(label))
                 .join(', ')}
             </p>
           )}

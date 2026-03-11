@@ -1,79 +1,58 @@
-'use client'
-
-import { FormError } from '@/components/forms/FormError'
-import { FormItem } from '@/components/forms/FormItem'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { useAuth } from '@/providers/Auth'
-import { useRouter } from 'next/navigation'
-import React, { Fragment, useCallback } from 'react'
-import { useForm } from 'react-hook-form'
-
-type FormData = {
-  email: string
-  orderID: string
-}
+import React, { Fragment } from 'react'
 
 type Props = {
   initialEmail?: string
 }
 
 export const FindOrderForm: React.FC<Props> = ({ initialEmail }) => {
-  const router = useRouter()
-  const { user } = useAuth()
-
-  const {
-    formState: { errors },
-    handleSubmit,
-    register,
-  } = useForm<FormData>({
-    defaultValues: {
-      email: initialEmail || user?.email,
-    },
-  })
-
-  const onSubmit = useCallback(
-    async (data: FormData) => {
-      router.push(`/orders/${data.orderID}?email=${data.email}`)
-    },
-    [router],
-  )
-
   return (
     <Fragment>
       <h1 className="text-xl mb-4">Find my order</h1>
       <div className="prose dark:prose-invert mb-8">
         <p>{`Please enter your email and order ID below.`}</p>
       </div>
-      <form className="max-w-lg flex flex-col gap-8" onSubmit={handleSubmit(onSubmit)}>
-        <FormItem>
-          <Label htmlFor="email" className="mb-2">
+      <form
+        action="/find-order/submit"
+        className="max-w-lg flex flex-col gap-8"
+        method="GET"
+      >
+        <div className="flex flex-col gap-2">
+          <label
+            className="mb-2 flex items-center gap-2 font-mono text-sm leading-none text-primary/50"
+            htmlFor="email"
+          >
             Email address
-          </Label>
-          <Input
+          </label>
+          <input
+            className="border-input bg-background flex h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base shadow-xs outline-none md:text-sm"
+            defaultValue={initialEmail}
             id="email"
-            {...register('email', { required: 'Email is required.' })}
+            name="email"
+            required
             type="email"
           />
-          {errors.email && <FormError message={errors.email.message} />}
-        </FormItem>
-        <FormItem>
-          <Label htmlFor="orderID" className="mb-2">
+        </div>
+        <div className="flex flex-col gap-2">
+          <label
+            className="mb-2 flex items-center gap-2 font-mono text-sm leading-none text-primary/50"
+            htmlFor="orderID"
+          >
             Order ID
-          </Label>
-          <Input
+          </label>
+          <input
+            className="border-input bg-background flex h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base shadow-xs outline-none md:text-sm"
             id="orderID"
-            {...register('orderID', {
-              required: 'Order ID is required. You can find this in your email.',
-            })}
+            name="orderID"
+            required
             type="text"
           />
-          {errors.orderID && <FormError message={errors.orderID.message} />}
-        </FormItem>
-        <Button type="submit" className="self-start" variant="default">
+        </div>
+        <button
+          className="bg-primary text-primary-foreground self-start rounded-md px-4 py-2 text-sm font-medium shadow-xs transition-[color,box-shadow]"
+          type="submit"
+        >
           Find my order
-        </Button>
+        </button>
       </form>
     </Fragment>
   )

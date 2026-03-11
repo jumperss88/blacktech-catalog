@@ -20,7 +20,81 @@ type RequestBody = {
   subtotal?: number
 }
 
+type NormalizedRequestItem = {
+  product: number
+  quantity: number
+  title: string
+  variant?: number
+  variantLabel?: string
+  priceInUSD?: number
+}
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return value
+}
+
+const getInventoryError = (title: string, quantity: number, available: number) => {
+  if (available <= 0) {
+    return `Товар "${title}" больше недоступен. Обновите заявку.`
+  }
+
+  return `Товар "${title}" доступен только в количестве ${available}, запрошено ${quantity}.`
+}
+
+async function validateItemAvailability(
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  item: NormalizedRequestItem,
+): Promise<string | null> {
+  const product = await payload.findByID({
+    collection: 'products',
+    id: item.product,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  if (!product) {
+    return `Товар "${item.title}" не найден.`
+  }
+
+  if (item.variant) {
+    const variant = await payload.findByID({
+      collection: 'variants',
+      id: item.variant,
+      depth: 1,
+      overrideAccess: true,
+    })
+
+    if (!variant) {
+      return `Вариант товара "${item.title}" не найден.`
+    }
+
+    const variantProductID =
+      typeof variant.product === 'object' ? variant.product?.id : toFiniteNumber(variant.product)
+
+    if (variantProductID !== item.product) {
+      return `Вариант товара "${item.title}" больше не соответствует выбранному товару.`
+    }
+
+    const available = toFiniteNumber(variant.inventory) ?? 0
+
+    if (available < item.quantity) {
+      return getInventoryError(item.title, item.quantity, available)
+    }
+
+    return null
+  }
+
+  const available = toFiniteNumber(product.inventory) ?? 0
+
+  if (available < item.quantity) {
+    return getInventoryError(item.title, item.quantity, available)
+  }
+
+  return null
+}
 
 export async function POST(req: Request): Promise<Response> {
   try {
@@ -48,7 +122,7 @@ export async function POST(req: Request): Promise<Response> {
       return Response.json({ error: 'В заявке нет товаров.' }, { status: 400 })
     }
 
-    const normalizedItems = requestItems
+    const normalizedItems: NormalizedRequestItem[] = requestItems
       .filter((item) => item?.productId && item?.quantity && item.quantity > 0)
       .map((item) => ({
         product: item.productId as number,
@@ -61,6 +135,20 @@ export async function POST(req: Request): Promise<Response> {
 
     if (normalizedItems.length === 0) {
       return Response.json({ error: 'Некорректные позиции в заявке.' }, { status: 400 })
+    }
+
+    for (const item of normalizedItems) {
+      const availabilityError = await validateItemAvailability(payload, item)
+
+      if (availabilityError) {
+        return Response.json(
+          {
+            error: availabilityError,
+            code: 'ITEM_UNAVAILABLE',
+          },
+          { status: 409 },
+        )
+      }
     }
 
     const authResult = await payload.auth({ headers: req.headers }).catch(() => null)

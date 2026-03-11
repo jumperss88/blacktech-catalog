@@ -1,0 +1,53 @@
+name: Release Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: file:./blacktech-catalog.db
+      PAYLOAD_SECRET: ci-release-gate-secret
+      PORT: 3000
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Enable corepack and activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.29.3 --activate
+          pnpm --version
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: corepack pnpm run test:e2e:install-browsers
+
+      - name: Check types
+        run: corepack pnpm run check:types
+        timeout-minutes: 5
+
+      - name: Run integration tests
+        run: corepack pnpm run test:int
+        timeout-minutes: 10
+
+      - name: Build app
+        run: corepack pnpm run build
+        timeout-minutes: 15
+
+      - name: Run e2e tests
+        run: corepack pnpm run test:e2e:ci
+        timeout-minutes: 15

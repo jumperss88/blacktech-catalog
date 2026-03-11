@@ -30,8 +30,9 @@ corepack pnpm run dev
 ```
 
 Локальные URL:
-- сайт: `http://localhost:3000`
-- админка: `http://localhost:3000/admin`
+- каноничный release/e2e base URL: `http://127.0.0.1:3000`
+- сайт: `http://127.0.0.1:3000`
+- админка: `http://127.0.0.1:3000/admin`
 
 ## 1.4 Минимальный smoke-check после старта
 ```bash
@@ -41,9 +42,13 @@ corepack pnpm run lint
 
 Перед деплоем:
 ```bash
+corepack pnpm run test:e2e:install-browsers
 corepack pnpm run check:deploy
-corepack pnpm run test:e2e
 ```
+
+Правило для QA/release-check:
+- проверка идет только через `http://127.0.0.1:3000`
+- `dev`, `test:e2e` и `check:deploy` закреплены на порту `3000`
 
 ---
 
@@ -138,3 +143,42 @@ corepack pnpm run test:e2e
 6. Обновить `.env.example` под SQLite вместо MongoDB URL.
 7. Актуализировать e2e-тесты под текущие маршруты и тексты интерфейса.
 8. Закрыть вопрос с `sitemap.xml`: добавить/подтвердить рабочий route-генератор.
+
+---
+
+## 6. Frontend E2E/CI Stabilization Addendum
+
+1. Сначала классифицируй падение:
+- `SQLITE_BUSY` / `database is locked` = сначала infra/data-layer, не UI.
+- UI/assertions менять только после исключения lock-path.
+
+2. Единый retry-policy для DB busy:
+- использовать общий retry helper;
+- детектить busy по `message + cause chain + stack`;
+- держать достаточное retry-window (`attempts + backoff`) для CI.
+
+3. Write-операции в e2e: prefer API helpers:
+- для чувствительных mutation-path использовать `page.request` / API helpers с retry;
+- избегать прямых `payload.update` там, где высок риск lock-конкуренции.
+
+4. Post-mutation проверки только через консистентность:
+- после write делать polling до фактического консистентного state (GET/API verification);
+- не полагаться на мгновенный UI-assert после мутации.
+
+5. Guard для media/runtime path:
+- `next/image` path должен быть защищен от невалидного/пустого `src` (включая object-src);
+- цель: исключить crash-class `Application error...` на PDP.
+
+6. CI parity перед статусом “готово”:
+- Node 20;
+- шаги как в release gate: `install -> browsers -> check:types -> test:int -> build -> test:e2e:ci`.
+
+7. E2E CI-like режим:
+- `PORT=3000`
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000`
+- `--workers=1`
+- `--reporter=line`
+
+8. Каноничный источник истины:
+- только completed GitHub run logs (`gh api .../jobs/<id>/logs` или `gh run view --log-failed`);
+- фикс принят только после полного green canonical run.

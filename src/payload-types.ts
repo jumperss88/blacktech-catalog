@@ -133,10 +133,12 @@ export interface Config {
   };
   fallbackLocale: null;
   globals: {
+    home: Home;
     header: Header;
     footer: Footer;
   };
   globalsSelect: {
+    home: HomeSelect<false> | HomeSelect<true>;
     header: HeaderSelect<false> | HeaderSelect<true>;
     footer: FooterSelect<false> | FooterSelect<true>;
   };
@@ -506,6 +508,7 @@ export interface Page {
     | MediaBlock
     | ArchiveBlock
     | CarouselBlock
+    | HomeB2BBlock
     | ServiceCenterBlock
     | ThreeItemGridBlock
     | BannerBlock
@@ -814,6 +817,28 @@ export interface CarouselBlock {
   id?: string | null;
   blockName?: string | null;
   blockType: 'carousel';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "HomeB2BBlock".
+ */
+export interface HomeB2BBlock {
+  eyebrow: string;
+  title: string;
+  description: string;
+  points?:
+    | {
+        title: string;
+        description: string;
+        icon: 'tender' | 'partner' | 'project';
+        id?: string | null;
+      }[]
+    | null;
+  buttonLabel: string;
+  buttonUrl: string;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'homeB2B';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1547,6 +1572,7 @@ export interface PagesSelect<T extends boolean = true> {
         mediaBlock?: T | MediaBlockSelect<T>;
         archive?: T | ArchiveBlockSelect<T>;
         carousel?: T | CarouselBlockSelect<T>;
+        homeB2B?: T | HomeB2BBlockSelect<T>;
         serviceCenter?: T | ServiceCenterBlockSelect<T>;
         threeItemGrid?: T | ThreeItemGridBlockSelect<T>;
         banner?: T | BannerBlockSelect<T>;
@@ -1805,6 +1831,27 @@ export interface CarouselBlockSelect<T extends boolean = true> {
   selectedDocs?: T;
   populatedDocs?: T;
   populatedDocsTotal?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "HomeB2BBlock_select".
+ */
+export interface HomeB2BBlockSelect<T extends boolean = true> {
+  eyebrow?: T;
+  title?: T;
+  description?: T;
+  points?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        icon?: T;
+        id?: T;
+      };
+  buttonLabel?: T;
+  buttonUrl?: T;
   id?: T;
   blockName?: T;
 }
@@ -2389,6 +2436,77 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "home".
+ */
+export interface Home {
+  id: number;
+  title: string;
+  hero: {
+    type: 'none' | 'highImpact' | 'mediumImpact' | 'lowImpact';
+    richText?: {
+      root: {
+        type: string;
+        children: {
+          type: any;
+          version: number;
+          [k: string]: unknown;
+        }[];
+        direction: ('ltr' | 'rtl') | null;
+        format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+        indent: number;
+        version: number;
+      };
+      [k: string]: unknown;
+    } | null;
+    links?:
+      | {
+          link: {
+            type?: ('reference' | 'custom') | null;
+            newTab?: boolean | null;
+            reference?: {
+              relationTo: 'pages';
+              value: number | Page;
+            } | null;
+            url?: string | null;
+            label: string;
+            /**
+             * Выберите, как ссылка будет отображаться.
+             */
+            appearance?: ('default' | 'outline') | null;
+          };
+          id?: string | null;
+        }[]
+      | null;
+    media?: (number | null) | Media;
+  };
+  layout: (
+    | AboutCompanyBlock
+    | CallToActionBlock
+    | ContentBlock
+    | ContactsHubBlock
+    | MediaBlock
+    | ArchiveBlock
+    | CarouselBlock
+    | HomeB2BBlock
+    | ServiceCenterBlock
+    | ThreeItemGridBlock
+    | BannerBlock
+    | FormBlock
+  )[];
+  meta?: {
+    title?: string | null;
+    /**
+     * Maximum upload file size: 12MB. Recommended file size for images is <500KB.
+     */
+    image?: (number | null) | Media;
+    description?: string | null;
+  };
+  _status?: ('draft' | 'published') | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "header".
  */
 export interface Header {
@@ -2449,6 +2567,62 @@ export interface Footer {
     | null;
   updatedAt?: string | null;
   createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "home_select".
+ */
+export interface HomeSelect<T extends boolean = true> {
+  title?: T;
+  hero?:
+    | T
+    | {
+        type?: T;
+        richText?: T;
+        links?:
+          | T
+          | {
+              link?:
+                | T
+                | {
+                    type?: T;
+                    newTab?: T;
+                    reference?: T;
+                    url?: T;
+                    label?: T;
+                    appearance?: T;
+                  };
+              id?: T;
+            };
+        media?: T;
+      };
+  layout?:
+    | T
+    | {
+        aboutCompany?: T | AboutCompanyBlockSelect<T>;
+        cta?: T | CallToActionBlockSelect<T>;
+        content?: T | ContentBlockSelect<T>;
+        contactsHub?: T | ContactsHubBlockSelect<T>;
+        mediaBlock?: T | MediaBlockSelect<T>;
+        archive?: T | ArchiveBlockSelect<T>;
+        carousel?: T | CarouselBlockSelect<T>;
+        homeB2B?: T | HomeB2BBlockSelect<T>;
+        serviceCenter?: T | ServiceCenterBlockSelect<T>;
+        threeItemGrid?: T | ThreeItemGridBlockSelect<T>;
+        banner?: T | BannerBlockSelect<T>;
+        formBlock?: T | FormBlockSelect<T>;
+      };
+  meta?:
+    | T
+    | {
+        title?: T;
+        image?: T;
+        description?: T;
+      };
+  _status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

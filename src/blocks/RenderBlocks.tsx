@@ -6,10 +6,10 @@ import { CarouselBlock } from '@/blocks/Carousel/Component'
 import { ContactsHubBlock } from '@/blocks/ContactsHub/Component'
 import { ContentBlock } from '@/blocks/Content/Component'
 import { FormBlock } from '@/blocks/Form/Component'
+import { HomeB2BBlock } from '@/blocks/HomeB2B/Component'
 import { MediaBlock } from '@/blocks/MediaBlock/Component'
 import { ServiceCenterBlock } from '@/blocks/ServiceCenter/Component'
 import { ThreeItemGridBlock } from '@/blocks/ThreeItemGrid/Component'
-import { HomeB2BSection } from '@/components/home/HomeB2BSection'
 import { toKebabCase } from '@/utilities/toKebabCase'
 import React, { Fragment } from 'react'
 
@@ -24,6 +24,7 @@ const blockComponents = {
   content: ContentBlock,
   cta: CallToActionBlock,
   formBlock: FormBlock,
+  homeB2B: HomeB2BBlock,
   mediaBlock: MediaBlock,
   serviceCenter: ServiceCenterBlock,
   threeItemGrid: ThreeItemGridBlock,
@@ -31,25 +32,16 @@ const blockComponents = {
 
 export const RenderBlocks: React.FC<{
   blocks: Page['layout'][0][]
-  showHomeB2BSection?: boolean
 }> = (props) => {
-  const { blocks, showHomeB2BSection = false } = props
+  const { blocks } = props
 
   const hasBlocks = blocks && Array.isArray(blocks) && blocks.length > 0
 
   if (hasBlocks) {
-    let insertedHomeB2BSection = false
-
     return (
       <Fragment>
         {blocks.map((block, index) => {
           const { blockName, blockType } = block
-          const shouldRenderHomeB2BSection =
-            showHomeB2BSection && blockType === 'carousel' && !insertedHomeB2BSection
-
-          if (shouldRenderHomeB2BSection) {
-            insertedHomeB2BSection = true
-          }
 
           if (blockType && blockType in blockComponents) {
             const Block = blockComponents[blockType]
@@ -62,7 +54,6 @@ export const RenderBlocks: React.FC<{
                     {/* @ts-ignore - weird type mismatch here */}
                     <Block id={toKebabCase(blockName!)} {...block} />
                   </div>
-                  {shouldRenderHomeB2BSection ? <HomeB2BSection /> : null}
                 </Fragment>
               )
             }

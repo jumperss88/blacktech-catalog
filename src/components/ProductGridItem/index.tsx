@@ -5,7 +5,7 @@ import React from 'react'
 import clsx from 'clsx'
 import { Media } from '@/components/Media'
 import { Price } from '@/components/Price'
-import { AddToCart } from '@/components/Cart/AddToCart'
+import { AddToCartClient } from './AddToCartClient'
 
 type Props = {
   product: Partial<Product>
@@ -106,7 +106,7 @@ export const ProductGridItem: React.FC<Props> = ({ product }) => {
           )}
         </div>
         <div className="product-shop-card-actions">
-          <AddToCart iconOnly product={product as Product} />
+          <AddToCartClient product={product as Product} />
         </div>
       </div>
     </article>

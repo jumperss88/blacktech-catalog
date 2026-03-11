@@ -1,0 +1,11 @@
+diff --git a/.env.example b/.env.example
+index 60b1831..94e56fb 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,5 +1,5 @@
+ PAYLOAD_SECRET=mygeneratedsecret
+-DATABASE_URL=mongodb://127.0.0.1/template-ecommerce
++DATABASE_URL=file:./blacktech-catalog.db
+ 
+ COMPANY_NAME="Payload Inc."
+ TWITTER_CREATOR="@payloadcms"
