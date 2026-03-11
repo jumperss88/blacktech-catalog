@@ -6,7 +6,6 @@ import { AddToCart } from '@/components/Cart/AddToCart'
 import { Price } from '@/components/Price'
 import React, { Suspense } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 
 import { VariantSelector } from './VariantSelector'
 import { useEcommerce } from '@payloadcms/plugin-ecommerce/client/react'
@@ -70,18 +69,6 @@ export function ProductDescription({ hasExtraDescription, hasSpecifications, pro
       .join(' ')
       .trim() || product.title
 
-  const addToCartFallback = (
-    <Button
-      aria-label="Добавить в заявку"
-      className="h-9 w-[220px] gap-2 px-3 text-base font-semibold"
-      disabled
-      type="button"
-      variant="outline"
-    >
-      <span className="leading-none">Добавить в заявку</span>
-    </Button>
-  )
-
   return (
     <div className="flex flex-col gap-6">
       <h1 className="product-detail-title text-[2rem] md:text-[2.15rem] font-semibold leading-tight">
@@ -139,7 +126,7 @@ export function ProductDescription({ hasExtraDescription, hasSpecifications, pro
           <Suspense fallback={null}>
             <StockIndicator product={product} />
           </Suspense>
-          <Suspense fallback={addToCartFallback}>
+          <Suspense fallback={null}>
             <AddToCart product={product} />
           </Suspense>
         </div>
