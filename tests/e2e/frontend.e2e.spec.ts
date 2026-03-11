@@ -1,6 +1,6 @@
 import { readFile } from 'fs/promises'
 import path from 'path'
-import { test, expect, Page } from '@playwright/test'
+import { test, expect, Page, type APIRequestContext } from '@playwright/test'
 import { getPayload } from 'payload'
 import { fileURLToPath } from 'url'
 import config from '../../src/payload.config.js'
@@ -307,10 +307,12 @@ test.describe('Frontend', () => {
 
     const newPriceMinor = buildUniqueMinorPrice(20)
     await updateProductPriceBySlug({
+      request: page.request,
       productSlug: 'test-product',
       priceInUSD: newPriceMinor,
     })
     await expectProductPriceBySlug({
+      request: page.request,
       productSlug: 'test-product',
       expectedPriceInUSD: newPriceMinor,
     })
@@ -324,10 +326,12 @@ test.describe('Frontend', () => {
 
     const newVariantPriceMinor = buildUniqueMinorPrice(25)
     await updateVariantPriceByProductSlug({
+      request: page.request,
       productSlug: 'test-product-variants',
       priceInUSD: newVariantPriceMinor,
     })
     await expectVariantPriceByProductSlug({
+      request: page.request,
       productSlug: 'test-product-variants',
       expectedPriceInUSD: newVariantPriceMinor,
     })
@@ -1052,84 +1056,154 @@ test.describe('Frontend', () => {
     return baseWhole * 100 + (Date.now() % 100)
   }
 
+  const isSqliteBusyBody = (body: unknown): boolean => {
+    const text = typeof body === 'string' ? body : JSON.stringify(body ?? {})
+    return text.includes('SQLITE_BUSY') || text.includes('database is locked')
+  }
+
+  async function withApiBusyRetry<T>(
+    label: string,
+    operation: () => Promise<{ busy: boolean; value?: T }>,
+  ): Promise<T> {
+    const maxAttempts = 10
+    const delaysMs = [100, 200, 400, 800, 1600, 3000, 3000, 3000, 3000]
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const result = await operation()
+      if (!result.busy) {
+        return result.value as T
+      }
+
+      if (attempt === maxAttempts) {
+        throw new Error(`[e2e][api-retry] ${label}: sqlite busy after ${maxAttempts} attempts`)
+      }
+
+      const delay = delaysMs[Math.min(attempt - 1, delaysMs.length - 1)]
+      console.warn(`[e2e][api-retry] ${label}: SQLITE_BUSY on attempt ${attempt}, retry in ${delay}ms`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+
+    throw new Error(`[e2e][api-retry] ${label}: unreachable`)
+  }
+
   async function updateProductPriceBySlug({
+    request,
     productSlug,
     priceInUSD,
   }: {
+    request: APIRequestContext
     productSlug: string
     priceInUSD: number
   }) {
-    const payload = await getPayloadWithRetry('shared')
-    const product = await findProductBySlug(productSlug)
+    const product = await findProductBySlugViaAPI(request, productSlug)
 
-    await withSqliteBusyRetry(
-      () =>
-        payload.update({
-          collection: 'products',
-          id: product.id,
+    await withApiBusyRetry(
+      `frontend.updateProductPriceBySlug:${productSlug}:${priceInUSD}`,
+      async () => {
+        const response = await request.patch(`${baseURL}/api/products/${product.id}`, {
           data: {
             priceInUSDEnabled: true,
             priceInUSD,
           },
-        }),
-      `frontend.updateProductPriceBySlug:${productSlug}:${priceInUSD}`,
+        })
+        const body = await response.json().catch(() => null)
+        if (!response.ok() && isSqliteBusyBody(body)) return { busy: true }
+        expect(response.ok(), `update product price failed: ${response.status()} ${JSON.stringify(body)}`).toBeTruthy()
+        return { busy: false, value: undefined }
+      },
     )
   }
 
   async function expectProductPriceBySlug({
+    request,
     productSlug,
     expectedPriceInUSD,
   }: {
+    request: APIRequestContext
     productSlug: string
     expectedPriceInUSD: number
   }) {
     await expect
       .poll(async () => {
-        const product = await findProductBySlug(productSlug)
+        const product = await findProductBySlugViaAPI(request, productSlug)
         return typeof product.priceInUSD === 'number' ? product.priceInUSD : null
       })
       .toBe(expectedPriceInUSD)
   }
 
   async function updateVariantPriceByProductSlug({
+    request,
     productSlug,
     priceInUSD,
   }: {
+    request: APIRequestContext
     productSlug: string
     priceInUSD: number
   }) {
-    const payload = await getPayloadWithRetry('shared')
-    const product = await findProductBySlug(productSlug)
-    const variant = await findVariantByProductID(Number(product.id), productSlug)
+    const product = await findProductBySlugViaAPI(request, productSlug)
+    const variant = await findVariantByProductIDViaAPI(request, Number(product.id), productSlug)
 
-    await withSqliteBusyRetry(
-      () =>
-        payload.update({
-          collection: 'variants',
-          id: variant.id,
+    await withApiBusyRetry(
+      `frontend.updateVariantPriceByProductSlug:${productSlug}:${priceInUSD}`,
+      async () => {
+        const response = await request.patch(`${baseURL}/api/variants/${variant.id}`, {
           data: {
             priceInUSDEnabled: true,
             priceInUSD,
           },
-        }),
-      `frontend.updateVariantPriceByProductSlug:${productSlug}:${priceInUSD}`,
+        })
+        const body = await response.json().catch(() => null)
+        if (!response.ok() && isSqliteBusyBody(body)) return { busy: true }
+        expect(response.ok(), `update variant price failed: ${response.status()} ${JSON.stringify(body)}`).toBeTruthy()
+        return { busy: false, value: undefined }
+      },
     )
   }
 
   async function expectVariantPriceByProductSlug({
+    request,
     productSlug,
     expectedPriceInUSD,
   }: {
+    request: APIRequestContext
     productSlug: string
     expectedPriceInUSD: number
   }) {
-    const product = await findProductBySlug(productSlug)
+    const product = await findProductBySlugViaAPI(request, productSlug)
     await expect
       .poll(async () => {
-        const variant = await findVariantByProductID(Number(product.id), productSlug)
+        const variant = await findVariantByProductIDViaAPI(request, Number(product.id), productSlug)
         return typeof variant.priceInUSD === 'number' ? variant.priceInUSD : null
       })
       .toBe(expectedPriceInUSD)
+  }
+
+  async function findProductBySlugViaAPI(request: APIRequestContext, productSlug: string) {
+    return withApiBusyRetry(`frontend.findProductBySlugViaAPI:${productSlug}`, async () => {
+      const response = await request.get(
+        `${baseURL}/api/products?limit=1&depth=0&where[slug][equals]=${encodeURIComponent(productSlug)}`,
+      )
+      const body = await response.json().catch(() => null)
+      if (!response.ok() && isSqliteBusyBody(body)) return { busy: true }
+      expect(response.ok(), `find product failed: ${response.status()} ${JSON.stringify(body)}`).toBeTruthy()
+      const product = body?.docs?.[0]
+      expect(product?.id, `findProductBySlugViaAPI missing product: ${productSlug}`).toBeTruthy()
+      return { busy: false, value: product }
+    })
+  }
+
+  async function findVariantByProductIDViaAPI(request: APIRequestContext, productID: number, productSlug: string) {
+    return withApiBusyRetry(`frontend.findVariantByProductIDViaAPI:${productSlug}:${productID}`, async () => {
+      const response = await request.get(
+        `${baseURL}/api/variants?limit=1&depth=0&where[product][equals]=${encodeURIComponent(String(productID))}`,
+      )
+      const body = await response.json().catch(() => null)
+      if (!response.ok() && isSqliteBusyBody(body)) return { busy: true }
+      expect(response.ok(), `find variant failed: ${response.status()} ${JSON.stringify(body)}`).toBeTruthy()
+      const variant = body?.docs?.[0]
+      expect(variant?.id, `findVariantByProductIDViaAPI missing variant for product: ${productSlug}`).toBeTruthy()
+      return { busy: false, value: variant }
+    })
   }
 
   async function findProductBySlug(productSlug: string) {
