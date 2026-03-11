@@ -78,6 +78,42 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     >
       <head>
         <InitTheme />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (() => {
+                const key = '__chunk_recovery_path__'
+                const isChunkLoadError = (value) => {
+                  if (!value || typeof value !== 'object') return false
+                  const name = typeof value.name === 'string' ? value.name : ''
+                  const message = typeof value.message === 'string' ? value.message : ''
+                  return name.includes('ChunkLoadError') || (message.includes('Loading chunk') && message.includes('failed'))
+                }
+                const recover = () => {
+                  try {
+                    const scope = window.location.pathname + window.location.search
+                    if (window.sessionStorage.getItem(key) === scope) return
+                    window.sessionStorage.setItem(key, scope)
+                  } catch (_) {}
+                  window.location.reload()
+                }
+                window.addEventListener('error', (event) => {
+                  if (isChunkLoadError(event.error ?? event)) {
+                    event.preventDefault()
+                    recover()
+                  }
+                })
+                window.addEventListener('unhandledrejection', (event) => {
+                  if (isChunkLoadError(event.reason)) {
+                    event.preventDefault()
+                    recover()
+                  }
+                })
+              })();
+            `,
+          }}
+          id="chunk-load-recovery"
+        />
         <link href="/favicon.ico" rel="icon" sizes="32x32" />
       </head>
       <body>
