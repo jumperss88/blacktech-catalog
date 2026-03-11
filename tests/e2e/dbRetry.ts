@@ -3,10 +3,31 @@ const SQLITE_BUSY_PATTERNS = ['SQLITE_BUSY', 'database is locked']
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 const isSqliteBusyError = (error: unknown): boolean => {
-  const message =
-    error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error)
+  const messages: string[] = []
+  let current: unknown = error
+  let depth = 0
 
-  return SQLITE_BUSY_PATTERNS.some((pattern) => message.includes(pattern))
+  while (current && depth < 8) {
+    const message =
+      current && typeof current === 'object' && 'message' in current
+        ? String(current.message)
+        : String(current)
+    messages.push(message)
+
+    if (current && typeof current === 'object' && 'stack' in current) {
+      messages.push(String(current.stack))
+    }
+
+    if (current && typeof current === 'object' && 'cause' in current) {
+      current = current.cause
+      depth += 1
+      continue
+    }
+
+    break
+  }
+
+  return SQLITE_BUSY_PATTERNS.some((pattern) => messages.some((message) => message.includes(pattern)))
 }
 
 type RetryOptions = {
@@ -20,9 +41,9 @@ export const withSqliteBusyRetry = async <T>(
   label: string,
   options: RetryOptions = {},
 ): Promise<T> => {
-  const maxAttempts = options.maxAttempts ?? 8
-  const initialDelayMs = options.initialDelayMs ?? 75
-  const maxDelayMs = options.maxDelayMs ?? 1500
+  const maxAttempts = options.maxAttempts ?? 14
+  const initialDelayMs = options.initialDelayMs ?? 100
+  const maxDelayMs = options.maxDelayMs ?? 3000
 
   let attempt = 1
   let delayMs = initialDelayMs
@@ -48,4 +69,3 @@ export const withSqliteBusyRetry = async <T>(
 
   throw lastError
 }
-

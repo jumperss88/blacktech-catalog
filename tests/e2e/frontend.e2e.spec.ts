@@ -42,6 +42,14 @@ test.describe('Frontend', () => {
     cvc: '737',
     postcode: 'WS11 1DB',
   }
+
+  const getPayloadWithRetry = (label: string) =>
+    withSqliteBusyRetry(
+      () => getPayload({ config }),
+      `frontend.getPayload:${label}`,
+      { maxAttempts: 14, initialDelayMs: 100, maxDelayMs: 3000 },
+    )
+
   test.beforeAll(async ({ request }) => {
     test.setTimeout(120_000)
     trackedUserEmails.add(adminEmail)
@@ -529,7 +537,7 @@ test.describe('Frontend', () => {
   }
 
   async function ensureAdminUser(email: string, password: string) {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
     const existing = await withSqliteBusyRetry(
       () =>
         payload.find({
@@ -775,7 +783,7 @@ test.describe('Frontend', () => {
     customerEmail?: string
     productSlug?: string
   }): Promise<number> {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
 
     const productResult = await withSqliteBusyRetry(
       () =>
@@ -826,7 +834,7 @@ test.describe('Frontend', () => {
   }
 
   async function expectStorefrontSortProbesToExist() {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
     const products = await withSqliteBusyRetry(
       () =>
         payload.find({
@@ -875,7 +883,7 @@ test.describe('Frontend', () => {
   }
 
   async function expectStorefrontProductToExist(slug: string) {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
 
     const productLookup = await withSqliteBusyRetry(
       () =>
@@ -934,7 +942,7 @@ test.describe('Frontend', () => {
   }
 
   async function updateProductInventory(productSlug: string, inventory: number) {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
 
     const productResult = await withSqliteBusyRetry(
       () =>
@@ -1051,7 +1059,7 @@ test.describe('Frontend', () => {
     productSlug: string
     priceInUSD: number
   }) {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
     const product = await findProductBySlug(productSlug)
 
     await withSqliteBusyRetry(
@@ -1090,7 +1098,7 @@ test.describe('Frontend', () => {
     productSlug: string
     priceInUSD: number
   }) {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
     const product = await findProductBySlug(productSlug)
     const variant = await findVariantByProductID(Number(product.id), productSlug)
 
@@ -1125,7 +1133,7 @@ test.describe('Frontend', () => {
   }
 
   async function findProductBySlug(productSlug: string) {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
     const productResult = await withSqliteBusyRetry(
       () =>
         payload.find({
@@ -1147,7 +1155,7 @@ test.describe('Frontend', () => {
   }
 
   async function findVariantByProductID(productID: number, productSlug: string) {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
     const variantResult = await withSqliteBusyRetry(
       () =>
         payload.find({
@@ -1169,7 +1177,7 @@ test.describe('Frontend', () => {
   }
 
   async function cleanupE2EData() {
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry('shared')
 
     const productDocs = await withSqliteBusyRetry(
       () =>

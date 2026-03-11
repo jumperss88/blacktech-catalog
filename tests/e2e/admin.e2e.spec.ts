@@ -13,9 +13,16 @@ test.describe('Admin Panel', () => {
     password: 'test',
   }
 
+  const getPayloadWithRetry = () =>
+    withSqliteBusyRetry(
+      () => getPayload({ config }),
+      'admin.getPayload',
+      { maxAttempts: 14, initialDelayMs: 100, maxDelayMs: 3000 },
+    )
+
   test.beforeAll(async ({ browser }) => {
     test.setTimeout(120_000)
-    const payload = await getPayload({ config })
+    const payload = await getPayloadWithRetry()
     const existing = await withSqliteBusyRetry(
       () =>
         payload.find({
