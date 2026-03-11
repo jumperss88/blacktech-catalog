@@ -26,6 +26,7 @@ import {
   InlineToolbarFeature,
   ParagraphFeature,
   TextStateFeature,
+  buildEditorState,
   lexicalEditor,
 } from '@payloadcms/richtext-lexical'
 import { convertLexicalToHTML } from '@payloadcms/richtext-lexical/html'
@@ -258,6 +259,30 @@ const dedupeGallery = (gallery: unknown): unknown => {
   return result
 }
 
+const normalizeRichTextInput = (value: unknown): unknown => {
+  if (typeof value !== 'string') {
+    return value
+  }
+
+  const trimmed = value.trim()
+
+  if (!trimmed) {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed)
+
+    if (parsed && typeof parsed === 'object' && 'root' in parsed) {
+      return parsed
+    }
+  } catch {
+    // Fall through to plain-text conversion for API clients that send raw strings.
+  }
+
+  return buildEditorState({ text: value })
+}
+
 export const ProductsCollection: CollectionOverride = ({ defaultCollection }) => ({
   ...defaultCollection,
   labels: {
@@ -325,6 +350,21 @@ export const ProductsCollection: CollectionOverride = ({ defaultCollection }) =>
               }),
           }
         })
+
+        return data
+      },
+      ({ data }) => {
+        if (!data || typeof data !== 'object') return data
+
+        const nextDescription = normalizeRichTextInput(data.description)
+        if (nextDescription !== undefined || typeof data.description === 'string') {
+          data.description = nextDescription
+        }
+
+        const nextExtraDescription = normalizeRichTextInput(data.extraDescription)
+        if (nextExtraDescription !== undefined || typeof data.extraDescription === 'string') {
+          data.extraDescription = nextExtraDescription
+        }
 
         return data
       },
