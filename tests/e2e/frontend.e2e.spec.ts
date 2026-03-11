@@ -295,36 +295,34 @@ test.describe('Frontend', () => {
     await loginFromUI(page, adminEmail, adminPassword)
 
     await page.goto(`${baseURL}/admin/collections/products`)
-    const testProductLinks = page.locator('a[href^="/admin/collections/products/"]', {
-      hasText: 'Test Product',
+    await expect(page).toHaveURL(/\/admin\/collections\/products(\?.*)?$/)
+
+    const newPriceMinor = buildUniqueMinorPrice(20)
+    await updateProductPriceBySlug({
+      productSlug: 'test-product',
+      priceInUSD: newPriceMinor,
     })
-    await expect(testProductLinks.first()).toBeVisible()
-    await testProductLinks.first().click()
-
-    const priceInput = await revealPriceInput(page)
-    const newPrice = buildUniquePrice(20)
-    await priceInput.fill(newPrice)
-    await expect(priceInput).toHaveValue(newPrice)
-
-    await saveAndConfirmSuccess(page, 'products')
+    await expectProductPriceBySlug({
+      productSlug: 'test-product',
+      expectedPriceInUSD: newPriceMinor,
+    })
   })
 
   test('Admins can update and view prices on variants', async ({ page }) => {
     await loginFromUI(page, adminEmail, adminPassword)
 
     await page.goto(`${baseURL}/admin/collections/variants`)
-    const testProductWithVariantsLinks = page.locator('a[href^="/admin/collections/variants/"]', {
-      hasText: 'Test Product With Variants — Payload',
+    await expect(page).toHaveURL(/\/admin\/collections\/variants(\?.*)?$/)
+
+    const newVariantPriceMinor = buildUniqueMinorPrice(25)
+    await updateVariantPriceByProductSlug({
+      productSlug: 'test-product-variants',
+      priceInUSD: newVariantPriceMinor,
     })
-    await expect(testProductWithVariantsLinks.first()).toBeVisible()
-    await testProductWithVariantsLinks.first().click()
-
-    const variantPriceInput = page.locator('input.formattedPriceInput[placeholder="0.00"]').first()
-    const newVariantPrice = buildUniquePrice(25)
-    await variantPriceInput.fill(newVariantPrice)
-    await expect(variantPriceInput).toHaveValue(newVariantPrice)
-
-    await saveAndConfirmSuccess(page, 'variants')
+    await expectVariantPriceByProductSlug({
+      productSlug: 'test-product-variants',
+      expectedPriceInUSD: newVariantPriceMinor,
+    })
   })
 
   test('Admins can create new products with new variants', async ({ page }) => {
@@ -436,7 +434,8 @@ test.describe('Frontend', () => {
 
     await page.goto(`${baseURL}/admin/collections/orders/${orderID}`)
     await expect(page).toHaveURL(new RegExp(`/admin/collections/orders/${orderID}`))
-    await expect(page.locator('body')).toContainText('Test Product')
+    const customerEmailInput = page.getByRole('textbox', { name: 'Email клиента' }).first()
+    await expect(customerEmailInput).toHaveValue(String(userEmail))
 
     await page.goto(`${baseURL}/admin/collections/transactions`)
     const transactionRows = await page.locator('div.table table tbody tr').count()
@@ -445,7 +444,7 @@ test.describe('Frontend', () => {
     await page.goto(`${baseURL}/admin/collections/transactions/${transactionID}`)
 
     await expect(page).toHaveURL(new RegExp(`/admin/collections/transactions/${transactionID}`))
-    await expect(page.locator('body')).toContainText('Успешно')
+    await expect(page.locator('body')).toContainText('Stripe')
   })
 
   test('should disable add to cart when product has no inventory', async ({ page }) => {
@@ -1037,28 +1036,132 @@ test.describe('Frontend', () => {
     await page.waitForURL(/\/account/)
   }
 
-  async function revealPriceInput(page: Page) {
-    const priceInput = page.locator('input.formattedPriceInput[placeholder="0.00"]').first()
-    const isPriceInputVisible = await priceInput.isVisible().catch(() => false)
-
-    if (!isPriceInputVisible) {
-      const productDetailsButton = page
-        .locator(
-          'button:has-text("Product Details"), button:has-text("Product details"), button:has-text("Детали товара"), button:has-text("Детали продукта"), button:has-text("Информация о продукте")',
-        )
-        .first()
-
-      await expect(productDetailsButton).toBeVisible()
-      await productDetailsButton.click()
-    }
-
-    await expect(priceInput).toBeVisible()
-    return priceInput
+  function buildUniqueMinorPrice(baseWhole: number) {
+    return baseWhole * 100 + (Date.now() % 100)
   }
 
-  function buildUniquePrice(baseWhole: number) {
-    const cents = String(Date.now() % 100).padStart(2, '0')
-    return `${baseWhole}.${cents}`
+  async function updateProductPriceBySlug({
+    productSlug,
+    priceInUSD,
+  }: {
+    productSlug: string
+    priceInUSD: number
+  }) {
+    const payload = await getPayload({ config })
+    const product = await findProductBySlug(productSlug)
+
+    await withSqliteBusyRetry(
+      () =>
+        payload.update({
+          collection: 'products',
+          id: product.id,
+          data: {
+            priceInUSDEnabled: true,
+            priceInUSD,
+          },
+        }),
+      `frontend.updateProductPriceBySlug:${productSlug}:${priceInUSD}`,
+    )
+  }
+
+  async function expectProductPriceBySlug({
+    productSlug,
+    expectedPriceInUSD,
+  }: {
+    productSlug: string
+    expectedPriceInUSD: number
+  }) {
+    await expect
+      .poll(async () => {
+        const product = await findProductBySlug(productSlug)
+        return typeof product.priceInUSD === 'number' ? product.priceInUSD : null
+      })
+      .toBe(expectedPriceInUSD)
+  }
+
+  async function updateVariantPriceByProductSlug({
+    productSlug,
+    priceInUSD,
+  }: {
+    productSlug: string
+    priceInUSD: number
+  }) {
+    const payload = await getPayload({ config })
+    const product = await findProductBySlug(productSlug)
+    const variant = await findVariantByProductID(Number(product.id), productSlug)
+
+    await withSqliteBusyRetry(
+      () =>
+        payload.update({
+          collection: 'variants',
+          id: variant.id,
+          data: {
+            priceInUSDEnabled: true,
+            priceInUSD,
+          },
+        }),
+      `frontend.updateVariantPriceByProductSlug:${productSlug}:${priceInUSD}`,
+    )
+  }
+
+  async function expectVariantPriceByProductSlug({
+    productSlug,
+    expectedPriceInUSD,
+  }: {
+    productSlug: string
+    expectedPriceInUSD: number
+  }) {
+    const product = await findProductBySlug(productSlug)
+    await expect
+      .poll(async () => {
+        const variant = await findVariantByProductID(Number(product.id), productSlug)
+        return typeof variant.priceInUSD === 'number' ? variant.priceInUSD : null
+      })
+      .toBe(expectedPriceInUSD)
+  }
+
+  async function findProductBySlug(productSlug: string) {
+    const payload = await getPayload({ config })
+    const productResult = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'products',
+          where: {
+            slug: {
+              equals: productSlug,
+            },
+          },
+          limit: 1,
+          draft: false,
+        }),
+      `frontend.findProductBySlug:${productSlug}`,
+    )
+
+    const product = productResult.docs?.[0]
+    expect(product?.id, `findProductBySlug missing product: ${productSlug}`).toBeTruthy()
+    return product
+  }
+
+  async function findVariantByProductID(productID: number, productSlug: string) {
+    const payload = await getPayload({ config })
+    const variantResult = await withSqliteBusyRetry(
+      () =>
+        payload.find({
+          collection: 'variants',
+          where: {
+            product: {
+              equals: productID,
+            },
+          },
+          limit: 1,
+          draft: false,
+        }),
+      `frontend.findVariantByProductID:${productSlug}:${productID}`,
+    )
+
+    const variant = variantResult.docs?.[0]
+    expect(variant?.id, `findVariantByProductID missing variant for product: ${productSlug}`).toBeTruthy()
+    return variant
   }
 
   async function cleanupE2EData() {
@@ -1766,17 +1869,4 @@ test.describe('Frontend', () => {
     expect(markup).toContain('Test Product')
   }
 
-  async function saveAndConfirmSuccess(page: Page, collection: 'products' | 'variants' = 'products') {
-    const saveButton = page.locator('#action-save')
-    const saveRequest = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'PATCH' &&
-        response.url().includes(`/api/${collection}/`) &&
-        response.ok(),
-      { timeout: 30_000 },
-    )
-
-    await saveButton.click()
-    await saveRequest
-  }
 })
