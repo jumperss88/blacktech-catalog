@@ -60,7 +60,13 @@ export const Image: React.FC<MediaProps> = (props) => {
   const hasRenderableSrc =
     typeof normalizedSrc === 'string'
       ? normalizedSrc.length > 0
-      : Boolean(normalizedSrc && typeof normalizedSrc === 'object')
+      : Boolean(
+          normalizedSrc &&
+            typeof normalizedSrc === 'object' &&
+            'src' in normalizedSrc &&
+            typeof normalizedSrc.src === 'string' &&
+            normalizedSrc.src.trim().length > 0,
+        )
 
   // Guard against runtime throws from next/image when a media relation is present but has no URL yet.
   if (!hasRenderableSrc) {

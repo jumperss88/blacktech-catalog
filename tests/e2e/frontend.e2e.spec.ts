@@ -471,22 +471,26 @@ test.describe('Frontend', () => {
     await updateProductInventory('no-inventory-product', 0)
     await waitForProductInventory(page, 'no-inventory-product', 0)
 
-    await page.goto(`${baseURL}/checkout`)
-    await expect
-      .poll(
-        async () => {
-          await page.reload()
-          return page.getByRole('heading', { name: 'Ваша заявка пуста' }).isVisible()
+    const noInventoryProduct = await findProductBySlug('no-inventory-product')
+    const submitResponse = await page.request.post(`${baseURL}/api/requests/submit`, {
+      data: {
+        contact: {
+          email: `inventory-check-${runId}@test.com`,
         },
-        { timeout: 20_000 },
-      )
-      .toBe(true)
+        items: [
+          {
+            productId: Number(noInventoryProduct.id),
+            quantity: 1,
+            title: String(noInventoryProduct.title || 'No Inventory Product'),
+          },
+        ],
+      },
+    })
 
-    await expect(page.getByRole('heading', { name: 'Контактные данные' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Отправить заявку' })).toHaveCount(0)
-    await expect(page.locator('body')).toContainText(
-      'Добавьте интересующие товары, и мы свяжемся с вами для уточнения деталей.',
-    )
+    const submitBody = await submitResponse.json().catch(() => null)
+    expect(submitResponse.ok(), `submit should fail for unavailable item: ${JSON.stringify(submitBody)}`).toBeFalsy()
+    expect(submitResponse.status()).toBe(409)
+    expect(submitBody?.code).toBe('ITEM_UNAVAILABLE')
   })
 
   async function createUserAndLogin(
