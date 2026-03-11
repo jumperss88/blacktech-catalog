@@ -36,28 +36,20 @@ type RequestPayload = {
   subtotal?: number
 }
 
-const toFiniteNumber = (value: unknown): number | undefined => {
-  const parsed =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && value.trim().length > 0
-        ? Number(value)
-        : NaN
-
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
 const isCartItemAvailable = (item: CartItem): boolean => {
   const product = item?.product
   if (!item || !product || typeof product !== 'object') return false
-  const quantity = toFiniteNumber(item.quantity)
-  if (!quantity || quantity < 1) return false
+  if (!item.quantity || item.quantity < 1) return false
 
   const variant = item.variant && typeof item.variant === 'object' ? item.variant : undefined
   const inventory =
-    toFiniteNumber(variant?.inventory) ?? toFiniteNumber(product.inventory)
+    typeof variant?.inventory === 'number'
+      ? variant.inventory
+      : typeof product.inventory === 'number'
+        ? product.inventory
+        : undefined
 
-  if (inventory !== undefined && inventory < 1) return false
+  if (typeof inventory === 'number' && inventory < 1) return false
 
   return true
 }
@@ -402,8 +394,8 @@ export const CheckoutPage: React.FC = () => {
 
           const isVariant = Boolean(variant) && typeof variant === 'object'
           const variantObject = variant && typeof variant === 'object' ? variant : undefined
-          const maxQuantity =
-            toFiniteNumber(variantObject?.inventory) ?? toFiniteNumber(product.inventory)
+          const maxQuantityRaw = variantObject?.inventory ?? product.inventory
+          const maxQuantity = typeof maxQuantityRaw === 'number' ? maxQuantityRaw : undefined
           const itemID = item.id ? String(item.id) : undefined
           const isRemoved = Boolean(itemID && removedItemIDs[itemID])
           const typedValue =
