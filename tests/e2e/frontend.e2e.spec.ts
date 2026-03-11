@@ -470,9 +470,19 @@ test.describe('Frontend', () => {
     })
 
     await updateProductInventory('no-inventory-product', 0)
+    await waitForProductInventory(page, 'no-inventory-product', 0)
 
     await page.goto(`${baseURL}/checkout`)
-    await expect(page.getByRole('heading', { name: 'Ваша заявка пуста' })).toBeVisible()
+    await expect
+      .poll(
+        async () => {
+          await page.reload()
+          return page.getByRole('heading', { name: 'Ваша заявка пуста' }).isVisible()
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(true)
+
     await expect(page.getByRole('heading', { name: 'Контактные данные' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Отправить заявку' })).toHaveCount(0)
     await expect(page.locator('body')).toContainText(
@@ -951,6 +961,22 @@ test.describe('Frontend', () => {
         }),
       `frontend.updateProductInventory.updateProduct:${productSlug}:${inventory}`,
     )
+  }
+
+  async function waitForProductInventory(page: Page, productSlug: string, expectedInventory: number) {
+    await expect
+      .poll(
+        async () => {
+          const response = await page.request.get(
+            `${baseURL}/api/products?limit=1&depth=0&where[slug][equals]=${encodeURIComponent(productSlug)}`,
+          )
+          const body = await response.json().catch(() => null)
+          if (!response.ok()) return null
+          return body?.docs?.[0]?.inventory ?? null
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(expectedInventory)
   }
 
   async function createTransactionForTest({
