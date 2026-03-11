@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/providers/Auth'
 import { useCart } from '@payloadcms/plugin-ecommerce/client/react'
-import { MinusIcon, PlusIcon, RotateCcwIcon, XIcon } from 'lucide-react'
+import { MinusIcon, PlusIcon, XIcon } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import type { Cart, Variant } from '@/payload-types'
@@ -56,7 +56,7 @@ const isCartItemAvailable = (item: CartItem): boolean => {
 
 export const CheckoutPage: React.FC = () => {
   const { user } = useAuth()
-  const { cart, clearCart, decrementItem, incrementItem, isLoading } = useCart()
+  const { cart, clearCart, decrementItem, incrementItem, isLoading, removeItem } = useCart()
 
   const [name, setName] = useState('')
   const [company, setCompany] = useState('')
@@ -68,7 +68,6 @@ export const CheckoutPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<null | string>(null)
   const [errorMessage, setErrorMessage] = useState<null | string>(null)
   const [typedQuantities, setTypedQuantities] = useState<Record<string, string>>({})
-  const [removedItemIDs, setRemovedItemIDs] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (user?.email) {
@@ -83,12 +82,8 @@ export const CheckoutPage: React.FC = () => {
   const activeCartItems = useMemo(() => {
     if (!cart?.items?.length) return []
 
-    return cart.items.filter((item) => {
-      const itemID = item.id ? String(item.id) : undefined
-      if (itemID && removedItemIDs[itemID]) return false
-      return isCartItemAvailable(item)
-    })
-  }, [cart?.items, removedItemIDs])
+    return cart.items.filter((item) => isCartItemAvailable(item))
+  }, [cart?.items])
 
   const cartIsEmpty = activeCartItems.length === 0
   const hasContact = Boolean(phone.trim() || email.trim())
@@ -250,18 +245,6 @@ export const CheckoutPage: React.FC = () => {
     setTypedQuantities((prev) => ({ ...prev, [itemID]: String(target) }))
   }
 
-  const markItemAsRemoved = (itemID: string) => {
-    setRemovedItemIDs((prev) => ({ ...prev, [itemID]: true }))
-  }
-
-  const restoreRemovedItem = (itemID: string) => {
-    setRemovedItemIDs((prev) => {
-      const next = { ...prev }
-      delete next[itemID]
-      return next
-    })
-  }
-
   if (successMessage) {
     return (
       <div className="py-12 w-full items-center">
@@ -377,7 +360,7 @@ export const CheckoutPage: React.FC = () => {
       <div className="basis-full lg:basis-1/3 lg:pl-8 p-8 border-none bg-primary/5 flex flex-col gap-8 rounded-lg">
         <h2 className="text-3xl font-medium">Ваша заявка</h2>
 
-        {cart?.items?.map((item: CartItem, index) => {
+        {activeCartItems.map((item: CartItem, index) => {
           if (typeof item.product !== 'object' || !item.product) return null
 
           const {
@@ -397,7 +380,6 @@ export const CheckoutPage: React.FC = () => {
           const maxQuantityRaw = variantObject?.inventory ?? product.inventory
           const maxQuantity = typeof maxQuantityRaw === 'number' ? maxQuantityRaw : undefined
           const itemID = item.id ? String(item.id) : undefined
-          const isRemoved = Boolean(itemID && removedItemIDs[itemID])
           const typedValue =
             itemID && typedQuantities[itemID] !== undefined
               ? typedQuantities[itemID]
@@ -408,15 +390,15 @@ export const CheckoutPage: React.FC = () => {
           }
 
           return (
-            <div className={`flex items-start gap-4 ${isRemoved ? 'opacity-55' : ''}`} key={index}>
+            <div className="flex items-start gap-4" key={index}>
               <div className="relative flex items-stretch justify-stretch h-20 w-20 p-2 rounded-lg border">
                 <div className="absolute -top-2 -right-2 z-10">
-                  {itemID && !isRemoved ? (
+                  {itemID ? (
                     <button
-                      aria-label="Пометить как удалённый"
+                      aria-label="Удалить из заявки"
                       className="ease hover:cursor-pointer flex h-[17px] w-[17px] items-center justify-center rounded-full bg-neutral-500 transition-all duration-200 hover:opacity-80"
                       disabled={isLoading}
-                      onClick={() => markItemAsRemoved(itemID)}
+                      onClick={() => void removeItem(itemID)}
                       type="button"
                     >
                       <XIcon className="mx-px h-4 w-4 text-white" />
@@ -454,81 +436,63 @@ export const CheckoutPage: React.FC = () => {
                     </p>
                   )}
 
-                  {isRemoved ? (
-                    <div className="mt-1 flex items-center gap-2">
-                      <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Удалено
-                      </span>
-                      {itemID && (
-                        <button
-                          className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-background"
-                          onClick={() => restoreRemovedItem(itemID)}
-                          type="button"
-                        >
-                          <RotateCcwIcon className="h-3.5 w-3.5" />
-                          Восстановить
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="grid h-10 w-[144px] grid-cols-[32px_1fr_32px] items-center rounded-lg border px-1">
-                      <button
-                        aria-label="Уменьшить количество"
-                        className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={!itemID || isLoading}
-                        onClick={() => {
-                          if (!itemID) return
-                          if (quantity <= 1) {
-                            markItemAsRemoved(itemID)
-                            return
-                          }
-                          void decrementItem(itemID)
-                        }}
-                        type="button"
-                      >
-                        <MinusIcon className="h-4 w-4" />
-                      </button>
-
-                      <input
-                        aria-label="Количество"
-                        className="w-full border-0 bg-transparent p-0 text-center text-lg font-medium leading-none outline-none"
-                        inputMode="numeric"
-                        onBlur={() => void applyTypedQuantity(item, maxQuantity)}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/[^\d]/g, '')
-                          if (itemID) {
-                            setTypedQuantities((prev) => ({ ...prev, [itemID]: value }))
-                          }
-                        }}
-                        onFocus={(e) => e.target.select()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            void applyTypedQuantity(item, maxQuantity)
-                          }
-                        }}
-                        pattern="[0-9]*"
-                        type="text"
-                        value={typedValue}
-                      />
-
-                      <button
-                        aria-label="Увеличить количество"
-                        className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={
-                          !itemID ||
-                          isLoading ||
-                          (typeof maxQuantity === 'number' ? quantity >= maxQuantity : false)
+                  <div className="grid h-10 w-[144px] grid-cols-[32px_1fr_32px] items-center rounded-lg border px-1">
+                    <button
+                      aria-label="Уменьшить количество"
+                      className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!itemID || isLoading}
+                      onClick={() => {
+                        if (!itemID) return
+                        if (quantity <= 1) {
+                          void removeItem(itemID)
+                          return
                         }
-                        onClick={() => {
-                          if (itemID) void incrementItem(itemID)
-                        }}
-                        type="button"
-                      >
-                        <PlusIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
+                        void decrementItem(itemID)
+                      }}
+                      type="button"
+                    >
+                      <MinusIcon className="h-4 w-4" />
+                    </button>
+
+                    <input
+                      aria-label="Количество"
+                      className="w-full border-0 bg-transparent p-0 text-center text-lg font-medium leading-none outline-none"
+                      inputMode="numeric"
+                      onBlur={() => void applyTypedQuantity(item, maxQuantity)}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^\d]/g, '')
+                        if (itemID) {
+                          setTypedQuantities((prev) => ({ ...prev, [itemID]: value }))
+                        }
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          void applyTypedQuantity(item, maxQuantity)
+                        }
+                      }}
+                      pattern="[0-9]*"
+                      type="text"
+                      value={typedValue}
+                    />
+
+                    <button
+                      aria-label="Увеличить количество"
+                      className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={
+                        !itemID ||
+                        isLoading ||
+                        (typeof maxQuantity === 'number' ? quantity >= maxQuantity : false)
+                      }
+                      onClick={() => {
+                        if (itemID) void incrementItem(itemID)
+                      }}
+                      type="button"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {typeof price === 'number' && <Price amount={price} />}
